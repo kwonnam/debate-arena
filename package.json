@@ -1,6 +1,6 @@
 {
   "name": "fight-for-me",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI Debate CLI - Codex vs Claude multi-round debates via local CLIs",
   "type": "module",
   "bin": {
