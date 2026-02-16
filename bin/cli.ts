@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { createProgram } from '../src/cli/index.js';
 
 const program = createProgram();

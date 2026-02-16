@@ -92,16 +92,6 @@ Default settings can be changed via `ffm config`:
 | `claudeModel` | Claude model override | - |
 | `applyTimeoutMs` | Apply command timeout (ms) | `300000` |
 
-## Environment Variables
-
-Create a `.env` file in your project root:
-
-```env
-CODEX_COMMAND=codex exec --skip-git-repo-check -
-CLAUDE_COMMAND=claude -p
-AGENT_COMMAND_TIMEOUT_MS=180000
-```
-
 ## How It Works
 
 1. Your question is sent to both Codex and Claude
