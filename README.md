@@ -1,8 +1,12 @@
 # fight-for-me
 
+[한국어](./README.KR.md)
+
 AI Debate CLI - Codex vs Claude multi-round debates via local CLIs.
 
-Two AI agents argue about your question, then synthesize a consensus. Optionally apply the conclusion directly to your codebase.
+Two AI agents argue about your question, then synthesize a consensus.
+Join the debate yourself with interactive mode for a 3-way discussion.
+Optionally apply the conclusion directly to your codebase.
 
 ## Prerequisites
 
@@ -37,6 +41,9 @@ ffm "Add error handling to API calls" --apply claude
 # Apply with both agents (Codex implements, Claude verifies)
 ffm "Implement caching layer" --plan --apply both
 
+# Join the debate as a third participant
+ffm "Best state management for React?" -i
+
 # Disable streaming output
 ffm "Compare ORMs for Node.js" --no-stream
 
@@ -70,6 +77,7 @@ ffm "General JS question" --no-context
 | `-f, --format <format>` | Output format: `pretty`, `json`, `markdown` | `pretty` |
 | `-a, --apply [provider]` | Apply conclusions: `codex`, `claude`, `both` | - |
 | `--plan` | Use implementation planning mode | `false` |
+| `-i, --interactive` | Join the debate as a third participant | `false` |
 | `--no-stream` | Disable streaming output | - |
 | `--no-synthesis` | Skip final synthesis | - |
 | `--no-context` | Disable project context collection | - |
@@ -99,6 +107,8 @@ Default settings can be changed via `ffm config`:
 3. They debate back and forth for the specified number of rounds
 4. A judge (default: Claude) synthesizes the debate into a final consensus
 5. Optionally, the conclusion is applied to your codebase by the selected agent
+
+In **interactive mode** (`-i`), you join as a third participant — after each round, you can add your own perspective, steer the discussion, or challenge the agents before the next round begins.
 
 ## License
 
