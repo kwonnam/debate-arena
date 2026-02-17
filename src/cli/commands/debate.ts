@@ -23,6 +23,7 @@ export function registerDebateCommand(program: Command): void {
     .option('--no-context', 'Disable project context collection')
     .option('--files <paths...>', 'Include specific files in project context')
     .option('-a, --apply [provider]', 'Apply conclusions to codebase (codex, claude, or both)')
+    .option('-i, --interactive', 'Join the debate as a third participant')
     .option('--plan', 'Use implementation planning debate mode')
     .action(async (question: string | undefined, opts: Record<string, unknown>) => {
       if (!question) {
@@ -41,10 +42,15 @@ export function registerDebateCommand(program: Command): void {
 
       const mode: DebateMode = opts.plan ? 'plan' : 'debate';
 
+      const isInteractive = opts.interactive === true;
+
       if (isPretty) {
         showBanner();
         if (mode === 'plan') {
           console.log(chalk.bold.blue('  Mode: Implementation Planning\n'));
+        }
+        if (isInteractive) {
+          console.log(chalk.bold.cyan('  Mode: Interactive 3-Way Debate (You + Codex + Claude)\n'));
         }
         showQuestion(question);
       }
@@ -84,9 +90,35 @@ export function registerDebateCommand(program: Command): void {
           format,
           projectContext: projectContext || undefined,
           mode,
+          interactive: isInteractive,
         };
 
         const callbacks = isPretty ? createPrettyCallbacks() : createSilentCallbacks();
+
+        if (isInteractive) {
+          const { input: inquirerInput } = await import('@inquirer/prompts');
+          const { renderUserTurnStart, renderUserTurnEnd } = await import('../../ui/renderer.js');
+
+          callbacks.onUserTurnStart = () => {
+            if (isPretty) {
+              renderUserTurnStart();
+            }
+          };
+
+          callbacks.onUserInput = async () => {
+            const response = await inquirerInput({
+              message: 'Your response (press Enter to skip):',
+            });
+            return response;
+          };
+
+          callbacks.onUserTurnEnd = (content: string) => {
+            if (isPretty) {
+              renderUserTurnEnd(content);
+            }
+          };
+        }
+
         const result = await orchestrator.run(options, callbacks);
 
         if (format !== 'pretty') {

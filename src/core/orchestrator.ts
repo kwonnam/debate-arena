@@ -42,6 +42,11 @@ export class DebateOrchestrator {
       // On round 1, Claude's opening also includes rebuttal to Codex
       const claudePhase = round === 1 ? 'opening' : 'rebuttal';
       await this.executeTurn(context, 'claude', round, claudePhase, stream, callbacks);
+
+      // User turn (interactive mode)
+      if (options.interactive && callbacks.onUserInput) {
+        await this.executeUserTurn(context, round, callbacks);
+      }
     }
 
     // Synthesis
@@ -77,6 +82,30 @@ export class DebateOrchestrator {
       synthesis,
       rounds,
     };
+  }
+
+  private async executeUserTurn(
+    context: DebateContext,
+    round: number,
+    callbacks: DebateCallbacks
+  ): Promise<void> {
+    callbacks.onUserTurnStart?.();
+
+    const content = await callbacks.onUserInput!();
+
+    if (content.trim() === '') {
+      callbacks.onUserTurnEnd?.('');
+      return;
+    }
+
+    const message: DebateMessage = {
+      provider: 'user',
+      round,
+      phase: 'rebuttal',
+      content,
+    };
+    context.addMessage(message);
+    callbacks.onUserTurnEnd?.(content);
   }
 
   private async executeTurn(

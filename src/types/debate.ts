@@ -1,5 +1,7 @@
 export type ProviderName = 'codex' | 'claude';
 
+export type ParticipantName = ProviderName | 'user';
+
 export type OutputFormat = 'pretty' | 'json' | 'markdown';
 
 export type JudgeOption = 'codex' | 'claude' | 'both';
@@ -17,10 +19,11 @@ export interface DebateOptions {
   format: OutputFormat;
   projectContext?: string;
   mode?: DebateMode;
+  interactive?: boolean;
 }
 
 export interface DebateMessage {
-  provider: ProviderName;
+  provider: ParticipantName;
   round: number;
   phase: 'opening' | 'rebuttal';
   content: string;
@@ -42,4 +45,7 @@ export interface DebateCallbacks {
   onSynthesisToken(token: string): void;
   onSynthesisEnd(content: string): void;
   onRetry(provider: ProviderName, attempt: number, maxAttempts: number, error: Error): void;
+  onUserTurnStart?(): void;
+  onUserTurnEnd?(content: string): void;
+  onUserInput?(): Promise<string>;
 }

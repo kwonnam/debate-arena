@@ -34,12 +34,12 @@ export function saveConfig(config: Partial<AppConfig>): void {
 
 export function getConfigValue(key: string): string | number | boolean | undefined {
   const config = loadConfig();
-  return (config as Record<string, unknown>)[key] as string | number | boolean | undefined;
+  return (config as unknown as Record<string, unknown>)[key] as string | number | boolean | undefined;
 }
 
 export function setConfigValue(key: string, value: string): void {
   const config = loadConfig();
-  const record = config as Record<string, unknown>;
+  const record = config as unknown as Record<string, unknown>;
 
   // Auto-convert booleans and numbers
   if (value === 'true') record[key] = true;

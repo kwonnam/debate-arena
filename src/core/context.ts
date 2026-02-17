@@ -1,5 +1,5 @@
 import type { Message } from '../providers/types.js';
-import type { DebateMessage, ProviderName } from '../types/debate.js';
+import type { DebateMessage, ParticipantName, ProviderName } from '../types/debate.js';
 import { DEBATE_PROMPTS, type PromptBuilders } from './prompt-builder.js';
 
 export class DebateContext {
@@ -26,7 +26,7 @@ export class DebateContext {
     return [...this.messages];
   }
 
-  getLastMessageFrom(provider: ProviderName): DebateMessage | undefined {
+  getLastMessageFrom(provider: ParticipantName): DebateMessage | undefined {
     for (let i = this.messages.length - 1; i >= 0; i--) {
       if (this.messages[i].provider === provider) {
         return this.messages[i];

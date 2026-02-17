@@ -1,16 +1,16 @@
-import type { DebateMode, ProviderName } from '../types/debate.js';
+import type { DebateMode, ParticipantName, ProviderName } from '../types/debate.js';
 
 // --- Interfaces ---
 
 export interface PromptBuilders {
   systemPrompt: (provider: ProviderName, projectContext?: string) => string;
   openingPrompt: (question: string) => string;
-  rebuttalPrompt: (opponentProvider: ProviderName, opponentResponse: string) => string;
+  rebuttalPrompt: (opponentProvider: ParticipantName, opponentResponse: string) => string;
 }
 
 export type SynthesisPromptBuilder = (
   question: string,
-  debateLog: Array<{ provider: ProviderName; round: number; content: string }>
+  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
 ) => string;
 
 export type ApplyPromptBuilder = (
@@ -24,6 +24,12 @@ export type ApplyPromptBuilder = (
 const PROVIDER_LABELS: Record<ProviderName, string> = {
   codex: 'Codex',
   claude: 'Claude',
+};
+
+const PARTICIPANT_LABELS: Record<ParticipantName, string> = {
+  codex: 'Codex',
+  claude: 'Claude',
+  user: 'User',
 };
 
 function opponentOf(provider: ProviderName): ProviderName {
@@ -67,10 +73,10 @@ export function buildOpeningPrompt(question: string): string {
 }
 
 export function buildRebuttalPrompt(
-  opponentProvider: ProviderName,
+  opponentProvider: ParticipantName,
   opponentResponse: string
 ): string {
-  const opponent = PROVIDER_LABELS[opponentProvider];
+  const opponent = PARTICIPANT_LABELS[opponentProvider];
   return [
     `${opponent} has responded with the following argument:`,
     '',
@@ -119,17 +125,20 @@ export function buildApplyPrompt(
 
 export function buildSynthesisPrompt(
   question: string,
-  debateLog: Array<{ provider: ProviderName; round: number; content: string }>
+  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
 ): string {
   const transcript = debateLog
     .map(
       (entry) =>
-        `[Round ${entry.round} - ${PROVIDER_LABELS[entry.provider]}]\n${entry.content}`
+        `[Round ${entry.round} - ${PARTICIPANT_LABELS[entry.provider]}]\n${entry.content}`
     )
     .join('\n\n---\n\n');
 
+  const hasUser = debateLog.some((e) => e.provider === 'user');
+  const participants = hasUser ? 'Codex, Claude, and the User' : 'Codex and Claude';
+
   return [
-    'You are a fair and balanced judge reviewing a debate between Codex and Claude.',
+    `You are a fair and balanced judge reviewing a debate between ${participants}.`,
     '',
     `Original Question: "${question}"`,
     '',
@@ -138,10 +147,10 @@ export function buildSynthesisPrompt(
     transcript,
     '',
     'Please provide a comprehensive synthesis:',
-    '1. Summarize the key points of agreement between both sides.',
+    '1. Summarize the key points of agreement between all sides.',
     '2. Highlight the most compelling arguments from each side.',
     '3. Identify areas where one side had stronger reasoning.',
-    '4. Provide a final, balanced answer to the original question that incorporates the best insights from both perspectives.',
+    '4. Provide a final, balanced answer to the original question that incorporates the best insights from all perspectives.',
     '5. Respond in the same language as the original question.',
   ].join('\n');
 }
@@ -193,10 +202,10 @@ export function buildPlanOpeningPrompt(question: string): string {
 }
 
 export function buildPlanRebuttalPrompt(
-  opponentProvider: ProviderName,
+  opponentProvider: ParticipantName,
   opponentResponse: string
 ): string {
-  const opponent = PROVIDER_LABELS[opponentProvider];
+  const opponent = PARTICIPANT_LABELS[opponentProvider];
   return [
     `${opponent} has proposed the following implementation plan:`,
     '',
@@ -214,17 +223,20 @@ export function buildPlanRebuttalPrompt(
 
 export function buildPlanSynthesisPrompt(
   question: string,
-  debateLog: Array<{ provider: ProviderName; round: number; content: string }>
+  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
 ): string {
   const transcript = debateLog
     .map(
       (entry) =>
-        `[Round ${entry.round} - ${PROVIDER_LABELS[entry.provider]}]\n${entry.content}`
+        `[Round ${entry.round} - ${PARTICIPANT_LABELS[entry.provider]}]\n${entry.content}`
     )
     .join('\n\n---\n\n');
 
+  const hasUser = debateLog.some((e) => e.provider === 'user');
+  const participants = hasUser ? 'Codex, Claude, and the User' : 'Codex and Claude';
+
   return [
-    'You are a technical lead synthesizing an implementation plan from a discussion between Codex and Claude.',
+    `You are a technical lead synthesizing an implementation plan from a discussion between ${participants}.`,
     '',
     `Feature Request: "${question}"`,
     '',

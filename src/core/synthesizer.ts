@@ -1,5 +1,5 @@
 import type { AIProvider, Message } from '../providers/types.js';
-import type { DebateMessage } from '../types/debate.js';
+import type { DebateMessage, ParticipantName } from '../types/debate.js';
 import { buildSynthesisPrompt, type SynthesisPromptBuilder } from './prompt-builder.js';
 
 export class Synthesizer {
