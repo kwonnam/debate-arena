@@ -1,4 +1,3 @@
-import { createProgram } from '../src/cli/index.js';
+import { startRepl } from '../src/repl/index.js';
 
-const program = createProgram();
-program.parse(process.argv);
+startRepl();

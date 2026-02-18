@@ -13,7 +13,14 @@ export default defineConfig({
   sourcemap: true,
   dts: false,
   banner: {
-    js: '#!/usr/bin/env node',
+    js: [
+      '#!/usr/bin/env node',
+      'import { createRequire as __createRequire } from "module";',
+      'const require = __createRequire(import.meta.url);',
+    ].join('\n'),
+  },
+  esbuildOptions(options) {
+    options.jsx = 'automatic';
   },
   define: {
     PKG_VERSION: JSON.stringify(pkg.version),

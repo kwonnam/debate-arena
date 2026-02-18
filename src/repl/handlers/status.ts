@@ -1,4 +1,3 @@
-import { Command } from 'commander';
 import chalk from 'chalk';
 import type { ProviderStatus } from '../../core/status-checker.js';
 import { checkAllProviders } from '../../core/status-checker.js';
@@ -17,18 +16,13 @@ function renderProviderStatus(status: ProviderStatus): void {
   console.log(`    Command:  ${status.configuredCommand}`);
 }
 
-export function registerStatusCommand(program: Command): void {
-  program
-    .command('status')
-    .description('Check agent CLI availability and configuration')
-    .action(() => {
-      console.log(chalk.bold('\n  FIGHT FOR ME — Agent Status\n'));
+export function handleStatus(): void {
+  console.log(chalk.bold('\n  FIGHT FOR ME — Agent Status\n'));
 
-      const providers = checkAllProviders();
-      for (const provider of providers) {
-        renderProviderStatus(provider);
-      }
+  const providers = checkAllProviders();
+  for (const provider of providers) {
+    renderProviderStatus(provider);
+  }
 
-      console.log('');
-    });
+  console.log('');
 }

@@ -1,9 +1,9 @@
-import { execSync } from 'node:child_process';
+﻿import { execSync } from 'node:child_process';
 import { readdirSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Command } from 'commander';
 import chalk from 'chalk';
+import { resetTTYInputState } from '../tty-state.js';
 
 interface ProcessInfo {
   readonly pid: number;
@@ -55,8 +55,7 @@ function findProcessesUnix(): ProcessInfo[] {
         line.includes('fight-for-me') &&
         line.includes('node') &&
         !line.includes('grep') &&
-        !line.includes('fight-for-me stop') &&
-        !line.includes('shell-snapshots'),
+        !line.includes('fight-for-me stop'),
     )
     .map((line) => {
       const parts = line.trim().split(/\s+/);
@@ -70,7 +69,7 @@ function findProcessesUnix(): ProcessInfo[] {
 function killProcess(pid: number, force: boolean): boolean {
   try {
     if (isWindows) {
-      execSync(`taskkill /F /T /PID ${pid}`, {
+      execSync(`taskkill /F /PID ${pid}`, {
         stdio: 'ignore',
         timeout: 5000,
       });
@@ -95,55 +94,57 @@ function cleanupTempFiles(): number {
           unlinkSync(join(dir, file));
           cleaned++;
         } catch {
-          // File may be locked by a still-running process — skip.
+          // File may be locked; skip.
         }
       }
     }
   } catch {
-    // Cannot read tmpdir — skip cleanup.
+    // Cannot read tmpdir; skip cleanup.
   }
 
   return cleaned;
 }
 
-export function registerStopCommand(program: Command): void {
-  program
-    .command('stop')
-    .description('Stop all running fight-for-me processes')
-    .option('--force', 'Force kill (SIGKILL on Unix)')
-    .option('--dry-run', 'Show target processes without stopping them')
-    .action((opts: { force?: boolean; dryRun?: boolean }) => {
-      const processes = findProcesses();
+export function handleStop(args: string): void {
+  try {
+    resetTTYInputState();
 
-      if (processes.length === 0) {
-        console.log(`\n  ${chalk.blue('ℹ')} No running fight-for-me processes found.\n`);
-        return;
+    const force = args.includes('--force');
+    const dryRun = args.includes('--dry-run');
+
+    const processes = findProcesses();
+
+    if (processes.length === 0) {
+      console.log(`\n  ${chalk.blue('Info')} No running fight-for-me processes found.\n`);
+      return;
+    }
+
+    console.log(`\n  Found ${processes.length} process(es):\n`);
+    for (const p of processes) {
+      console.log(`  PID ${chalk.bold(String(p.pid))}  ${p.command}`);
+    }
+    console.log('');
+
+    if (dryRun) {
+      console.log(`  ${chalk.yellow('dry-run')} - no processes were stopped.\n`);
+      return;
+    }
+
+    let stopped = 0;
+    for (const p of processes) {
+      if (killProcess(p.pid, force)) {
+        stopped++;
       }
+    }
 
-      console.log(`\n  Found ${processes.length} process(es):\n`);
-      for (const p of processes) {
-        console.log(`  PID ${chalk.bold(String(p.pid))}  ${p.command}`);
-      }
-      console.log('');
+    const cleaned = cleanupTempFiles();
 
-      if (opts.dryRun) {
-        console.log(`  ${chalk.yellow('dry-run')} — no processes were stopped.\n`);
-        return;
-      }
-
-      let stopped = 0;
-      for (const p of processes) {
-        if (killProcess(p.pid, opts.force ?? false)) {
-          stopped++;
-        }
-      }
-
-      const cleaned = cleanupTempFiles();
-
-      console.log(`  ${chalk.green('✓')} Stopped ${stopped} process(es).`);
-      if (cleaned > 0) {
-        console.log(`  Cleaned up ${cleaned} orphaned temp file(s).`);
-      }
-      console.log('');
-    });
+    console.log(`  ${chalk.green('OK')} Stopped ${stopped} process(es).`);
+    if (cleaned > 0) {
+      console.log(`  Cleaned up ${cleaned} orphaned temp file(s).`);
+    }
+    console.log('');
+  } finally {
+    resetTTYInputState();
+  }
 }
