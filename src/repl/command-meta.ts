@@ -33,13 +33,6 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
     category: 'debate',
     args: { kind: 'required', placeholder: '<topic>' },
   },
-  {
-    command: 'apply',
-    description: 'Debate then apply code changes',
-    category: 'debate',
-    args: { kind: 'required', placeholder: '<topic>' },
-  },
-
   // Session
   {
     command: 'rounds',
@@ -89,7 +82,7 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
     command: 'model',
     description: 'Select agent model',
     category: 'management',
-    args: { kind: 'optional', placeholder: '[codex|claude]' },
+    args: { kind: 'optional', placeholder: '[codex|claude|list|refresh]' },
   },
   {
     command: 'status',

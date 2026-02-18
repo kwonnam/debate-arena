@@ -41,10 +41,9 @@ function applySessionUpdate(result: SessionUpdateResult, ctx: CommandContext): C
   return { session: result.updated ? result.state : ctx.session };
 }
 
-const DEBATE_SLASH_MODES: Record<string, 'plan' | 'interactive' | 'apply'> = {
+const DEBATE_SLASH_MODES: Record<string, 'plan' | 'interactive'> = {
   plan: 'plan',
   i: 'interactive',
-  apply: 'apply',
 };
 
 const handlers = new Map<string, CommandHandler>();

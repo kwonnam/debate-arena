@@ -1,6 +1,6 @@
 import type { AIProvider, Message } from '../providers/types.js';
 import type { ProviderName } from '../types/debate.js';
-import { buildApplyPrompt, type ApplyPromptBuilder } from './prompt-builder.js';
+import { buildPlanApplyPrompt, type ApplyPromptBuilder } from './prompt-builder.js';
 
 export class Applier {
   private provider: AIProvider;
@@ -10,7 +10,7 @@ export class Applier {
   constructor(
     provider: AIProvider,
     providerName: ProviderName,
-    buildPrompt: ApplyPromptBuilder = buildApplyPrompt
+    buildPrompt: ApplyPromptBuilder = buildPlanApplyPrompt
   ) {
     this.provider = provider;
     this.providerName = providerName;

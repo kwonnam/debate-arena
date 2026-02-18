@@ -1,30 +1,40 @@
-﻿import { select } from '@inquirer/prompts';
+import { select } from '@inquirer/prompts';
 import chalk from 'chalk';
+import ora from 'ora';
 import { loadConfig, saveConfig } from '../../config/manager.js';
+import {
+  fetchCodexModels,
+  fetchClaudeModels,
+  clearModelCache,
+  type ModelFetchResult,
+} from '../../core/model-fetcher.js';
 import { withSafeStdin } from '../tty-state.js';
 
-const CODEX_MODELS = [
-  { value: 'o3', name: 'o3' },
-  { value: 'o4-mini', name: 'o4-mini' },
-  { value: 'gpt-4.1', name: 'gpt-4.1' },
-  { value: 'gpt-4.1-mini', name: 'gpt-4.1-mini' },
-  { value: 'gpt-4.1-nano', name: 'gpt-4.1-nano' },
-] as const;
-
-const CLAUDE_MODELS = [
-  { value: 'claude-opus-4-6', name: 'claude-opus-4-6' },
-  { value: 'claude-sonnet-4-5-20250929', name: 'claude-sonnet-4-5-20250929' },
-  { value: 'claude-haiku-4-5-20251001', name: 'claude-haiku-4-5-20251001' },
-] as const;
+function sourceLabel(source: ModelFetchResult['source']): string {
+  switch (source) {
+    case 'api':
+      return chalk.green('[API]');
+    case 'cached':
+      return chalk.yellow('[cached]');
+    case 'fallback':
+      return chalk.dim('[fallback]');
+  }
+}
 
 async function selectCodexModel(): Promise<void> {
+  const spinner = ora('Fetching Codex models...').start();
+  const result = await fetchCodexModels();
+  spinner.stop();
+
+  console.log(`  Models loaded ${sourceLabel(result.source)}`);
+
   const config = loadConfig();
   const chosen = await withSafeStdin(() =>
     select({
       message: 'Select Codex model:',
       choices: [
         { value: '', name: '(default - CLI built-in)' },
-        ...CODEX_MODELS.map((m) => ({
+        ...result.models.map((m) => ({
           value: m.value,
           name: config.codexModel === m.value ? `${m.name} ${chalk.green('(current)')}` : m.name,
         })),
@@ -39,13 +49,19 @@ async function selectCodexModel(): Promise<void> {
 }
 
 async function selectClaudeModel(): Promise<void> {
+  const spinner = ora('Fetching Claude models...').start();
+  const result = await fetchClaudeModels();
+  spinner.stop();
+
+  console.log(`  Models loaded ${sourceLabel(result.source)}`);
+
   const config = loadConfig();
   const chosen = await withSafeStdin(() =>
     select({
       message: 'Select Claude model:',
       choices: [
         { value: '', name: '(default - CLI built-in)' },
-        ...CLAUDE_MODELS.map((m) => ({
+        ...result.models.map((m) => ({
           value: m.value,
           name: config.claudeModel === m.value ? `${m.name} ${chalk.green('(current)')}` : m.name,
         })),
@@ -57,6 +73,11 @@ async function selectClaudeModel(): Promise<void> {
   saveConfig({ claudeModel: chosen });
   const label = chosen || '(default)';
   console.log(`\n  ${chalk.green('OK')} Claude model set to ${chalk.bold(label)}\n`);
+}
+
+function handleRefresh(): void {
+  clearModelCache();
+  console.log(`\n  ${chalk.green('OK')} Model cache cleared.\n`);
 }
 
 function listModels(): void {
@@ -81,11 +102,14 @@ export async function handleModel(args: string): Promise<void> {
     case 'claude':
       await selectClaudeModel();
       break;
+    case 'refresh':
+      handleRefresh();
+      break;
     case 'list':
     case '':
       listModels();
       break;
     default:
-      console.log('Usage: /model [codex|claude|list]');
+      console.log('Usage: /model [codex|claude|list|refresh]');
   }
 }

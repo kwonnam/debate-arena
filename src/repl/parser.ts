@@ -2,14 +2,12 @@ export type ParsedCommand =
   | { kind: 'debate'; topic: string; mode: 'debate' }
   | { kind: 'debate'; topic: string; mode: 'plan' }
   | { kind: 'debate'; topic: string; mode: 'interactive' }
-  | { kind: 'debate'; topic: string; mode: 'apply' }
   | { kind: 'slash'; command: string; args: string }
   | { kind: 'empty' };
 
 const DEBATE_ALIASES: Record<string, ParsedCommand['kind'] extends 'debate' ? ParsedCommand['mode'] : never> = {
   '/plan': 'plan',
   '/i': 'interactive',
-  '/apply': 'apply',
 };
 
 export function parseInput(raw: string): ParsedCommand {

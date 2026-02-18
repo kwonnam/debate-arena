@@ -6,7 +6,6 @@ AI Debate CLI - Codex vs Claude multi-round debates via local CLIs.
 
 Two AI agents argue about your question, then synthesize a consensus.
 Join the debate yourself with interactive mode for a 3-way discussion.
-Optionally apply the conclusion directly to your codebase.
 
 ## Prerequisites
 
@@ -31,15 +30,6 @@ ffm "Best state management for React?" -r 5
 
 # Use implementation planning mode
 ffm "How should we refactor the auth module?" --plan
-
-# Apply the debate conclusion to your codebase
-ffm "Add input validation to the user form" --apply
-
-# Apply with a specific agent
-ffm "Add error handling to API calls" --apply claude
-
-# Apply with both agents (Codex implements, Claude verifies)
-ffm "Implement caching layer" --plan --apply both
 
 # Join the debate as a third participant
 ffm "Best state management for React?" -i
@@ -66,7 +56,7 @@ ffm "General JS question" --no-context
 | `ffm config` | View or update configuration |
 | `ffm status` | Show current status and configuration |
 | `ffm stop` | Stop running agent processes |
-| `ffm model` | Configure AI models |
+| `ffm model` | Configure AI models (dynamic fetching from API) |
 
 ## Options
 
@@ -75,7 +65,6 @@ ffm "General JS question" --no-context
 | `-r, --rounds <n>` | Number of debate rounds | `3` |
 | `-j, --judge <provider>` | Judge for synthesis: `codex`, `claude`, `both` | `claude` |
 | `-f, --format <format>` | Output format: `pretty`, `json`, `markdown` | `pretty` |
-| `-a, --apply [provider]` | Apply conclusions: `codex`, `claude`, `both` | - |
 | `--plan` | Use implementation planning mode | `false` |
 | `-i, --interactive` | Join the debate as a third participant | `false` |
 | `--no-stream` | Disable streaming output | - |
@@ -100,15 +89,45 @@ Default settings can be changed via `ffm config`:
 | `claudeModel` | Claude model override | - |
 | `applyTimeoutMs` | Apply command timeout (ms) | `300000` |
 
+## REPL Commands
+
+In the interactive REPL, you can use these slash commands:
+
+| Command | Description |
+|---------|-------------|
+| `/plan <topic>` | Plan mode (debate then propose implementation) |
+| `/i <topic>` | Interactive 3-way debate (You + Codex + Claude) |
+| `/model codex` | Select Codex model (fetched from OpenAI API) |
+| `/model claude` | Select Claude model (fetched from Anthropic API) |
+| `/model list` | Show currently configured models |
+| `/model refresh` | Clear model cache and re-fetch from APIs |
+| `/rounds <n>` | Set number of debate rounds |
+| `/judge <provider>` | Set judge: codex, claude, both |
+| `/format <format>` | Output format: pretty, json, markdown |
+| `/config` | Manage persistent configuration |
+| `/help` | Show help |
+| `/exit` | Exit the REPL |
+
+### Dynamic Model Fetching
+
+The `/model` command dynamically fetches available models from each provider's API:
+
+- **Codex**: Uses OpenAI `models.list()` API (requires `OPENAI_API_KEY`)
+- **Claude**: Uses Anthropic `GET /v1/models` API (requires `ANTHROPIC_API_KEY`)
+- Results are cached in-memory for 5 minutes
+- Falls back to a built-in list if API keys are missing or requests fail
+- Use `/model refresh` to clear the cache and force re-fetch
+
 ## How It Works
 
 1. Your question is sent to both Codex and Claude
 2. Each agent responds with their perspective
 3. They debate back and forth for the specified number of rounds
 4. A judge (default: Claude) synthesizes the debate into a final consensus
-5. Optionally, the conclusion is applied to your codebase by the selected agent
 
-In **interactive mode** (`-i`), you join as a third participant — after each round, you can add your own perspective, steer the discussion, or challenge the agents before the next round begins.
+In **plan mode** (`--plan` or `/plan`), after synthesis you can choose to apply the conclusion directly to your codebase.
+
+In **interactive mode** (`-i` or `/i`), you join as a third participant — after each round, you can add your own perspective, steer the discussion, or challenge the agents before the next round begins.
 
 ## License
 

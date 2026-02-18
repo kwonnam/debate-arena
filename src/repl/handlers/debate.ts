@@ -21,7 +21,7 @@ import { collectProjectContext } from '../../core/project-context.js';
 import { withSafeStdin } from '../tty-state.js';
 import type { SessionState } from '../session.js';
 
-type DebateModeArg = 'debate' | 'plan' | 'interactive' | 'apply';
+type DebateModeArg = 'debate' | 'plan' | 'interactive';
 type GitStatusCode = string;
 
 interface GitSnapshot {
@@ -157,7 +157,6 @@ export async function handleDebate(
 
   const mode: DebateMode = modeArg === 'plan' ? 'plan' : 'debate';
   const isInteractive = modeArg === 'interactive';
-  const shouldApply = modeArg === 'apply';
 
   if (isPretty) {
     if (mode === 'plan') {
@@ -165,9 +164,6 @@ export async function handleDebate(
     }
     if (isInteractive) {
       console.log(chalk.bold.cyan('\n  Mode: Interactive 3-Way Debate (You + Codex + Claude)\n'));
-    }
-    if (shouldApply) {
-      console.log(chalk.bold.green('\n  Mode: Debate + Apply\n'));
     }
     showQuestion(topic);
   }
@@ -245,9 +241,7 @@ export async function handleDebate(
       console.log('\nDebate complete.\n');
     }
 
-    if (shouldApply) {
-      await handleApply(topic, result, mode);
-    } else if (mode === 'plan' && isPretty) {
+    if (mode === 'plan' && isPretty) {
       const { select } = await import('@inquirer/prompts');
 
       const shouldProceed = await withSafeStdin(() =>

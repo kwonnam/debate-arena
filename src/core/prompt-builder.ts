@@ -91,38 +91,6 @@ export function buildRebuttalPrompt(
   ].join('\n');
 }
 
-export function buildApplyPrompt(
-  question: string,
-  approach: string,
-  approachLabel: string,
-  executor: ProviderName,
-  _isSecondPass?: boolean
-): string {
-  const toolGuidance =
-    executor === 'codex'
-      ? 'Directly modify files in the project to implement this approach.'
-      : 'Use Edit, Write, Bash, and Read tools to directly modify files in the project.';
-
-  return [
-    `You are an AI agent tasked with applying a chosen approach to a codebase.`,
-    '',
-    `Original Question: "${question}"`,
-    '',
-    `Selected Approach (${approachLabel} — chosen by the user from a debate between Codex and Claude):`,
-    '',
-    '---',
-    approach,
-    '---',
-    '',
-    'Instructions:',
-    `1. ${toolGuidance}`,
-    '2. Follow the selected approach faithfully.',
-    '3. Make minimal, focused changes — only what is necessary.',
-    '4. Do not introduce unrelated modifications.',
-    '5. Respond in the same language as the original question.',
-  ].join('\n');
-}
-
 export function buildSynthesisPrompt(
   question: string,
   debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
@@ -344,6 +312,6 @@ export function getSynthesisPromptBuilder(mode: DebateMode): SynthesisPromptBuil
   return mode === 'plan' ? buildPlanSynthesisPrompt : buildSynthesisPrompt;
 }
 
-export function getApplyPromptBuilder(mode: DebateMode): ApplyPromptBuilder {
-  return mode === 'plan' ? buildPlanApplyPrompt : buildApplyPrompt;
+export function getApplyPromptBuilder(_mode: DebateMode): ApplyPromptBuilder {
+  return buildPlanApplyPrompt;
 }
