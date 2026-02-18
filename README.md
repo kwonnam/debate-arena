@@ -1,62 +1,131 @@
 # fight-for-me
 
-[한국어](./README.KR.md)
+**Let two AIs fight for the best answer — then turn the winner into code.**
 
-AI Debate CLI - Codex vs Claude multi-round debates via local CLIs.
+[한국어](./README.KR.md) | [npm](https://www.npmjs.com/package/fight-for-me) | [GitHub](https://github.com/Leekee0905/fight-for-me)
 
-Two AI agents argue about your question, then synthesize a consensus.
-Join the debate yourself with interactive mode for a 3-way discussion.
+---
 
-## Prerequisites
+## Why AI Debate?
+
+A single AI gives you *one* perspective. But real engineering decisions need trade-offs, counter-arguments, and stress-testing. **fight-for-me** pits Codex (OpenAI) against Claude (Anthropic) in a structured, multi-round debate — so you get battle-tested answers, not just auto-complete.
+
+> One AI is an opinion. Two AIs debating is due diligence.
+
+---
+
+## Three Modes
+
+### 1. Agent vs Agent — Structured AI Debate
+
+Two AI agents argue your question from opposing sides across multiple rounds, then a judge synthesizes the best answer.
+
+```bash
+ffm "Should we use REST or GraphQL for our new API?"
+```
+
+```
+┌─────────────────────────────────────────────────┐
+│  Round 1                                        │
+│  Codex: "REST is simpler, better caching..."    │
+│  Claude: "GraphQL reduces over-fetching..."     │
+│                                                 │
+│  Round 2                                        │
+│  Codex: "But GraphQL adds complexity..."        │
+│  Claude: "Schema-first approach prevents..."    │
+│                                                 │
+│  Round 3                                        │
+│  Codex: "For this use case, consider..."        │
+│  Claude: "Agreed, but also note..."             │
+│                                                 │
+│  ✨ Synthesis                                   │
+│  "Use REST for public APIs, GraphQL for..."     │
+└─────────────────────────────────────────────────┘
+```
+
+### 2. You + Agents — Interactive 3-Way Discussion
+
+Jump into the debate as a third participant. Steer the conversation, challenge assumptions, or provide domain context that only you know.
+
+```bash
+ffm "Best state management for React?" -i
+```
+
+```
+┌─────────────────────────────────────────────────┐
+│  Round 1                                        │
+│  Codex: "Redux Toolkit for large apps..."       │
+│  Claude: "Zustand is lighter and simpler..."    │
+│                                                 │
+│  👤 You: "We need SSR support and the team      │
+│           is junior — simplicity matters most"  │
+│                                                 │
+│  Round 2                                        │
+│  Codex: "Given SSR needs, consider..."          │
+│  Claude: "For junior teams, Zustand's API..."   │
+│  ...                                            │
+└─────────────────────────────────────────────────┘
+```
+
+### 3. Debate → Code — Plan Mode
+
+The agents debate *how* to change your code, then you apply the consensus directly to your codebase. From discussion to implementation in one flow.
+
+```bash
+ffm "How should we refactor the auth module?" --plan
+```
+
+```
+┌─────────────────────────────────────────────────┐
+│  Debate: 3 rounds on refactoring strategy       │
+│  ...                                            │
+│  ✨ Consensus: "Extract JWT logic into          │
+│     service layer, add refresh token rotation"  │
+│                                                 │
+│  Apply changes to codebase? (y/n)               │
+│  > Codex applies the agreed-upon changes...     │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+<!-- TODO: Add demo GIF here -->
+<!-- ![demo](./assets/demo.gif) -->
+
+## Quick Start
+
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) >= 18
 - [Codex CLI](https://github.com/openai/codex) installed and configured
 - [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) installed and configured
 
-## Installation
+### Install
 
 ```bash
 npm install -g fight-for-me
 ```
 
-## Usage
+### Basic Usage
 
 ```bash
-# Ask a question (interactive prompt if omitted)
-ffm "Should we use REST or GraphQL for our new API?"
+# Start a debate
+ffm "Your question here"
 
-# Specify number of debate rounds
-ffm "Best state management for React?" -r 5
+# 5-round debate
+ffm "Compare ORMs for Node.js" -r 5
 
-# Use implementation planning mode
-ffm "How should we refactor the auth module?" --plan
+# Join as a participant
+ffm "Microservices vs monolith?" -i
 
-# Join the debate as a third participant
-ffm "Best state management for React?" -i
+# Debate and apply code changes
+ffm "Refactor this module" --plan
 
-# Disable streaming output
-ffm "Compare ORMs for Node.js" --no-stream
-
-# Output as JSON or Markdown
-ffm "Best testing strategy?" -f json
-ffm "Best testing strategy?" -f markdown
-
-# Include specific files as context
+# Include files as context
 ffm "How to improve this code?" --files src/index.ts src/utils.ts
-
-# Skip project context collection
-ffm "General JS question" --no-context
 ```
 
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `ffm [question]` | Start a debate (default command) |
-| `ffm config` | View or update configuration |
-| `ffm status` | Show current status and configuration |
-| `ffm stop` | Stop running agent processes |
-| `ffm model` | Configure AI models (dynamic fetching from API) |
+---
 
 ## Options
 
@@ -65,12 +134,45 @@ ffm "General JS question" --no-context
 | `-r, --rounds <n>` | Number of debate rounds | `3` |
 | `-j, --judge <provider>` | Judge for synthesis: `codex`, `claude`, `both` | `claude` |
 | `-f, --format <format>` | Output format: `pretty`, `json`, `markdown` | `pretty` |
-| `--plan` | Use implementation planning mode | `false` |
-| `-i, --interactive` | Join the debate as a third participant | `false` |
+| `--plan` | Enable plan mode (debate → apply code) | `false` |
+| `-i, --interactive` | Join as a third participant | `false` |
 | `--no-stream` | Disable streaming output | - |
 | `--no-synthesis` | Skip final synthesis | - |
 | `--no-context` | Disable project context collection | - |
-| `--files <paths...>` | Include specific files in context | - |
+| `--files <paths...>` | Include specific files as context | - |
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `ffm [question]` | Start a debate (default) |
+| `ffm config` | View or update configuration |
+| `ffm status` | Show current status and configuration |
+| `ffm stop` | Stop running agent processes |
+| `ffm model` | Configure AI models |
+
+## REPL Commands
+
+Inside the interactive REPL:
+
+| Command | Description |
+|---------|-------------|
+| `/plan <topic>` | Debate & apply code changes |
+| `/join <topic>` | Interactive 3-way debate (You + Codex + Claude). Alias: `/i` |
+| `/rounds <n>` | Set number of debate rounds |
+| `/judge <provider>` | Set judge: `codex`, `claude`, `both` |
+| `/format <format>` | Output format: `pretty`, `json`, `markdown` |
+| `/stream` | Toggle streaming output |
+| `/files <paths...>` | Set context files (replaces current list) |
+| `/context` | Toggle project context collection. Alias: `/nocontext` |
+| `/model codex <name>` | Set Codex model (from known models list) |
+| `/model claude <name>` | Set Claude model (from known models list) |
+| `/model list` | Show currently configured models and known models |
+| `/config` | Manage persistent configuration |
+| `/status` | Check agent CLI status |
+| `/stop` | Stop running fight-for-me processes |
+| `/help` | Show help |
+| `/exit` | Exit the REPL. Alias: `/quit` |
 
 ## Configuration
 
@@ -87,47 +189,39 @@ Default settings can be changed via `ffm config`:
 | `stream` | Enable streaming | `true` |
 | `codexModel` | Codex model override | - |
 | `claudeModel` | Claude model override | - |
+| `claudeApplyCommand` | Claude CLI command for plan mode | `claude -p --allowedTools "Edit Write Bash Read"` |
 | `applyTimeoutMs` | Apply command timeout (ms) | `300000` |
-
-## REPL Commands
-
-In the interactive REPL, you can use these slash commands:
-
-| Command | Description |
-|---------|-------------|
-| `/plan <topic>` | Debate & apply code changes |
-| `/join <topic>` | Interactive 3-way debate (You + Codex + Claude) |
-| `/model codex` | Select Codex model (fetched from OpenAI API) |
-| `/model claude` | Select Claude model (fetched from Anthropic API) |
-| `/model list` | Show currently configured models |
-| `/model refresh` | Clear model cache and re-fetch from APIs |
-| `/rounds <n>` | Set number of debate rounds |
-| `/judge <provider>` | Set judge: codex, claude, both |
-| `/format <format>` | Output format: pretty, json, markdown |
-| `/config` | Manage persistent configuration |
-| `/help` | Show help |
-| `/exit` | Exit the REPL |
-
-### Dynamic Model Fetching
-
-The `/model` command dynamically fetches available models from each provider's API:
-
-- **Codex**: Uses OpenAI `models.list()` API (requires `OPENAI_API_KEY`)
-- **Claude**: Uses Anthropic `GET /v1/models` API (requires `ANTHROPIC_API_KEY`)
-- Results are cached in-memory for 5 minutes
-- Falls back to a built-in list if API keys are missing or requests fail
-- Use `/model refresh` to clear the cache and force re-fetch
 
 ## How It Works
 
-1. Your question is sent to both Codex and Claude
+```
+  You
+   │
+   ▼
+┌──────┐     ┌───────────────────────────────────┐
+│ ffm  │────▶│         Debate Engine              │
+└──────┘     │                                     │
+             │  ┌───────┐  Round N  ┌────────┐    │
+             │  │ Codex │◄────────►│ Claude │    │
+             │  └───────┘          └────────┘    │
+             │       │                  │         │
+             │       ▼                  ▼         │
+             │  ┌─────────────────────────────┐  │
+             │  │    Judge (Synthesis)         │  │
+             │  └─────────────────────────────┘  │
+             └───────────────┬───────────────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+         Pretty Text    JSON Output   Code Changes
+                                      (Plan Mode)
+```
+
+1. Your question is sent to both **Codex** and **Claude**
 2. Each agent responds with their perspective
-3. They debate back and forth for the specified number of rounds
-4. A judge (default: Claude) synthesizes the debate into a final consensus
-
-In **plan mode** (`--plan` or `/plan`), after synthesis you can choose to apply the conclusion directly to your codebase.
-
-In **interactive mode** (`-i` or `/join`), you join as a third participant — after each round, you can add your own perspective, steer the discussion, or challenge the agents before the next round begins.
+3. They debate back and forth for N rounds
+4. A judge synthesizes the debate into a final consensus
+5. In **plan mode**, the consensus is applied to your codebase
 
 ## License
 
