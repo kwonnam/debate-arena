@@ -1,3 +1,5 @@
+import type { DebateMode } from '../types/debate.js';
+
 export type ParsedCommand =
   | { kind: 'debate'; topic: string; mode: 'debate' }
   | { kind: 'debate'; topic: string; mode: 'plan' }
@@ -7,15 +9,16 @@ export type ParsedCommand =
 
 const DEBATE_ALIASES: Record<string, ParsedCommand['kind'] extends 'debate' ? ParsedCommand['mode'] : never> = {
   '/plan': 'plan',
+  '/join': 'interactive',
   '/i': 'interactive',
 };
 
-export function parseInput(raw: string): ParsedCommand {
+export function parseInput(raw: string, defaultMode: DebateMode = 'debate'): ParsedCommand {
   const trimmed = raw.trim();
   if (trimmed === '') return { kind: 'empty' };
 
   if (!trimmed.startsWith('/')) {
-    return { kind: 'debate', topic: trimmed, mode: 'debate' };
+    return { kind: 'debate', topic: trimmed, mode: defaultMode };
   }
 
   const spaceIdx = trimmed.indexOf(' ');

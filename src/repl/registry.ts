@@ -43,6 +43,7 @@ function applySessionUpdate(result: SessionUpdateResult, ctx: CommandContext): C
 
 const DEBATE_SLASH_MODES: Record<string, 'plan' | 'interactive'> = {
   plan: 'plan',
+  join: 'interactive',
   i: 'interactive',
 };
 
@@ -61,6 +62,7 @@ handlers.set('judge', (args, ctx) => applySessionUpdate(handleJudge(args, ctx.se
 handlers.set('format', (args, ctx) => applySessionUpdate(handleFormat(args, ctx.session), ctx));
 handlers.set('stream', (_args, ctx) => applySessionUpdate(handleStream(ctx.session), ctx));
 handlers.set('files', (args, ctx) => applySessionUpdate(handleFiles(args, ctx.session), ctx));
+handlers.set('context', (_args, ctx) => applySessionUpdate(handleNoContext(ctx.session), ctx));
 handlers.set('nocontext', (_args, ctx) => applySessionUpdate(handleNoContext(ctx.session), ctx));
 
 for (const cmd of Object.keys(DEBATE_SLASH_MODES)) {

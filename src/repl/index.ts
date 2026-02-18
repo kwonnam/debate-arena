@@ -9,6 +9,7 @@ import { inkPrompt } from '../ink/ink-prompt.js';
 import { COMMAND_REGISTRY } from './command-meta.js';
 import { resetTTYInputState } from './tty-state.js';
 import type { CommandContext } from './registry.js';
+import type { DebateMode } from '../types/debate.js';
 
 declare const PKG_VERSION: string;
 
@@ -60,6 +61,8 @@ export async function startRepl(): Promise<void> {
     stream: config.stream,
   });
 
+  let debateMode: DebateMode = 'debate';
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const result = await inkPrompt({
@@ -70,6 +73,7 @@ export async function startRepl(): Promise<void> {
         format: session.format,
         stream: session.stream,
       },
+      debateMode,
     });
 
     try {
@@ -83,16 +87,20 @@ export async function startRepl(): Promise<void> {
           process.exit(0);
           break;
 
+        case 'mode-toggle':
+          debateMode = debateMode === 'debate' ? 'plan' : 'debate';
+          continue;
+
         case 'slash': {
           const line = result.args
             ? `/${result.command} ${result.args}`
             : `/${result.command}`;
-          session = await dispatchCommand(parseInput(line), { session });
+          session = await dispatchCommand(parseInput(line, debateMode), { session });
           continue;
         }
 
         case 'line': {
-          session = await dispatchCommand(parseInput(result.line), { session });
+          session = await dispatchCommand(parseInput(result.line, debateMode), { session });
           continue;
         }
       }

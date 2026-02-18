@@ -1,3 +1,5 @@
+import { getModelCompletions } from './handlers/model.js';
+
 export type CommandCategory = 'debate' | 'session' | 'management';
 
 export type ArgSpec =
@@ -11,10 +13,11 @@ export interface CommandMeta {
   readonly category: CommandCategory;
   readonly args: ArgSpec;
   readonly aliases?: readonly string[];
+  readonly getCompletions?: (input: string) => readonly string[];
 }
 
 export const CATEGORY_LABELS: Record<CommandCategory, string> = {
-  debate: 'Debate Commands',
+  debate: 'Debate Modes',
   session: 'Session Settings',
   management: 'Management',
 };
@@ -23,15 +26,16 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
   // Debate
   {
     command: 'plan',
-    description: 'Plan mode (토론 후 구현 적용 제안)',
+    description: 'Debate & apply code changes',
     category: 'debate',
     args: { kind: 'required', placeholder: '<topic>' },
   },
   {
-    command: 'i',
+    command: 'join',
     description: 'Interactive 3-way debate (You + Codex + Claude)',
     category: 'debate',
     args: { kind: 'required', placeholder: '<topic>' },
+    aliases: ['i'],
   },
   // Session
   {
@@ -60,15 +64,16 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
   },
   {
     command: 'files',
-    description: 'Set context files',
+    description: 'Set context files (replaces current)',
     category: 'session',
     args: { kind: 'required', placeholder: '<paths...>' },
   },
   {
-    command: 'nocontext',
+    command: 'context',
     description: 'Toggle project context collection',
     category: 'session',
     args: { kind: 'none' },
+    aliases: ['nocontext'],
   },
 
   // Management
@@ -80,9 +85,10 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
   },
   {
     command: 'model',
-    description: 'Select agent model',
+    description: 'Set agent model',
     category: 'management',
-    args: { kind: 'optional', placeholder: '[codex|claude|list|refresh]' },
+    args: { kind: 'optional', placeholder: '<codex|claude> [model]' },
+    getCompletions: getModelCompletions,
   },
   {
     command: 'status',

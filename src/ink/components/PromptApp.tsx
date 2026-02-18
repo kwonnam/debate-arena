@@ -41,6 +41,7 @@ export function PromptApp({ config, onResult }: PromptAppProps) {
       {config.session && <StatusBar session={config.session} />}
       {mode === 'input' ? (
         <InputPrompt
+          debateMode={config.debateMode}
           onSubmit={(value) => {
             const trimmed = value.trim();
             if (!trimmed) {
@@ -52,6 +53,7 @@ export function PromptApp({ config, onResult }: PromptAppProps) {
           onSlash={() => setMode('command-menu')}
           onInterrupt={() => handleResult({ kind: 'interrupt' })}
           onEof={() => handleResult({ kind: 'eof' })}
+          onModeToggle={() => handleResult({ kind: 'mode-toggle' })}
         />
       ) : (
         <CommandMenu

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { CommandItem } from '../types.js';
@@ -11,11 +11,31 @@ interface CommandMenuProps {
 
 const MAX_VISIBLE = 12;
 
+function applyCompletion(current: string, completion: string): string {
+  const parts = current.trimStart().split(/\s+/);
+
+  if (parts.length <= 1) {
+    return completion + ' ';
+  }
+
+  return parts.slice(0, -1).join(' ') + ' ' + completion;
+}
+
 export function CommandMenu({ commands, onSelect, onCancel }: CommandMenuProps) {
   const [filter, setFilter] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [argMode, setArgMode] = useState<CommandItem | null>(null);
   const [argValue, setArgValue] = useState('');
+  const [completionIndex, setCompletionIndex] = useState(0);
+
+  const completions = useMemo(() => {
+    if (!argMode?.getCompletions) return [];
+    return [...argMode.getCompletions(argValue)];
+  }, [argMode, argValue]);
+
+  useEffect(() => {
+    setCompletionIndex(0);
+  }, [argValue]);
 
   const filtered = useMemo(() => {
     const lower = filter.toLowerCase();
@@ -24,6 +44,7 @@ export function CommandMenu({ commands, onSelect, onCancel }: CommandMenuProps) 
         (c) =>
           !lower ||
           c.command.startsWith(lower) ||
+          c.aliases?.some((a) => a.startsWith(lower)) ||
           c.description.toLowerCase().includes(lower),
       )
       .slice(0, MAX_VISIBLE);
@@ -34,12 +55,46 @@ export function CommandMenu({ commands, onSelect, onCancel }: CommandMenuProps) 
       if (key.escape) {
         setArgMode(null);
         setArgValue('');
+        return;
       }
+
+      if (completions.length > 0) {
+        if (key.tab) {
+          const selected = completions[completionIndex];
+          if (selected !== undefined) {
+            setArgValue(applyCompletion(argValue, selected));
+          }
+          return;
+        }
+
+        if (key.upArrow) {
+          setCompletionIndex((i) => Math.max(0, i - 1));
+          return;
+        }
+
+        if (key.downArrow) {
+          setCompletionIndex((i) => Math.min(completions.length - 1, i + 1));
+          return;
+        }
+      }
+
       return;
     }
 
     if (key.escape || ((key.backspace || key.delete) && filter === '')) {
       onCancel();
+      return;
+    }
+
+    if (key.tab) {
+      if (filtered.length > 0) {
+        const cmd = filtered[selectedIndex];
+        if (cmd.args.kind !== 'none') {
+          setArgMode(cmd);
+        } else {
+          onSelect(cmd.command, '');
+        }
+      }
       return;
     }
 
@@ -66,16 +121,46 @@ export function CommandMenu({ commands, onSelect, onCancel }: CommandMenuProps) 
             onChange={setArgValue}
             placeholder={placeholder}
             onSubmit={(val) => {
+              if (completions.length > 0) {
+                const selected = completions[completionIndex];
+                if (selected !== undefined) {
+                  const applied = applyCompletion(val, selected);
+                  const tokenCount = applied.trim().split(/\s+/).length;
+                  if (tokenCount >= 2) {
+                    onSelect(argMode.command, applied.trim());
+                  } else {
+                    setArgValue(applied);
+                  }
+                  return;
+                }
+              }
               onSelect(argMode.command, val.trim());
             }}
           />
         </Box>
-        <Text dimColor>
-          {'  '}
-          {argMode.args.kind === 'required'
-            ? '(required)'
-            : '(optional, press Enter to skip)'}
-        </Text>
+        {completions.length > 0 ? (
+          completions.map((item, i) => {
+            const isHighlighted = i === completionIndex;
+            return (
+              <Box key={item}>
+                <Text
+                  color={isHighlighted ? 'cyan' : undefined}
+                  bold={isHighlighted}
+                >
+                  {isHighlighted ? '> ' : '  '}
+                  {item}
+                </Text>
+              </Box>
+            );
+          })
+        ) : (
+          <Text dimColor>
+            {'  '}
+            {argMode.args.kind === 'required'
+              ? '(required)'
+              : '(optional, press Enter to skip)'}
+          </Text>
+        )}
       </Box>
     );
   }

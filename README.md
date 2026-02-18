@@ -95,8 +95,8 @@ In the interactive REPL, you can use these slash commands:
 
 | Command | Description |
 |---------|-------------|
-| `/plan <topic>` | Plan mode (debate then propose implementation) |
-| `/i <topic>` | Interactive 3-way debate (You + Codex + Claude) |
+| `/plan <topic>` | Debate & apply code changes |
+| `/join <topic>` | Interactive 3-way debate (You + Codex + Claude) |
 | `/model codex` | Select Codex model (fetched from OpenAI API) |
 | `/model claude` | Select Claude model (fetched from Anthropic API) |
 | `/model list` | Show currently configured models |
@@ -127,7 +127,7 @@ The `/model` command dynamically fetches available models from each provider's A
 
 In **plan mode** (`--plan` or `/plan`), after synthesis you can choose to apply the conclusion directly to your codebase.
 
-In **interactive mode** (`-i` or `/i`), you join as a third participant — after each round, you can add your own perspective, steer the discussion, or challenge the agents before the next round begins.
+In **interactive mode** (`-i` or `/join`), you join as a third participant — after each round, you can add your own perspective, steer the discussion, or challenge the agents before the next round begins.
 
 ## License
 

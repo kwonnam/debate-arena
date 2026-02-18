@@ -1,86 +1,47 @@
-import { select } from '@inquirer/prompts';
 import chalk from 'chalk';
-import ora from 'ora';
 import { loadConfig, saveConfig } from '../../config/manager.js';
-import {
-  fetchCodexModels,
-  fetchClaudeModels,
-  clearModelCache,
-  type ModelFetchResult,
-} from '../../core/model-fetcher.js';
-import { withSafeStdin } from '../tty-state.js';
 
-function sourceLabel(source: ModelFetchResult['source']): string {
-  switch (source) {
-    case 'api':
-      return chalk.green('[API]');
-    case 'cached':
-      return chalk.yellow('[cached]');
-    case 'fallback':
-      return chalk.dim('[fallback]');
+export const KNOWN_CODEX_MODELS: readonly string[] = [
+  'o3',
+  'o4-mini',
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4.1-nano',
+];
+
+export const KNOWN_CLAUDE_MODELS: readonly string[] = [
+  'claude-opus-4-6',
+  'claude-sonnet-4-5-20250929',
+  'claude-haiku-4-5-20251001',
+];
+
+const PROVIDERS: readonly string[] = ['codex', 'claude'];
+
+type Provider = 'codex' | 'claude';
+
+export function getModelCompletions(input: string): readonly string[] {
+  const trimmed = input.trimStart();
+  const parts = trimmed.split(/\s+/);
+
+  if (parts.length <= 1) {
+    const prefix = parts[0]?.toLowerCase() ?? '';
+    return PROVIDERS.filter((p) => p.startsWith(prefix));
   }
+
+  const provider = parts[0].toLowerCase();
+  const modelPrefix = parts[parts.length - 1].toLowerCase();
+
+  const models =
+    provider === 'codex'
+      ? KNOWN_CODEX_MODELS
+      : provider === 'claude'
+        ? KNOWN_CLAUDE_MODELS
+        : [];
+
+  return ['default', ...models].filter((m) => m.startsWith(modelPrefix));
 }
 
-async function selectCodexModel(): Promise<void> {
-  const spinner = ora('Fetching Codex models...').start();
-  const result = await fetchCodexModels();
-  spinner.stop();
-
-  console.log(`  Models loaded ${sourceLabel(result.source)}`);
-
-  const config = loadConfig();
-  const chosen = await withSafeStdin(() =>
-    select({
-      message: 'Select Codex model:',
-      choices: [
-        { value: '', name: '(default - CLI built-in)' },
-        ...result.models.map((m) => ({
-          value: m.value,
-          name: config.codexModel === m.value ? `${m.name} ${chalk.green('(current)')}` : m.name,
-        })),
-      ],
-      default: config.codexModel,
-    }),
-  );
-
-  saveConfig({ codexModel: chosen });
-  const label = chosen || '(default)';
-  console.log(`\n  ${chalk.green('OK')} Codex model set to ${chalk.bold(label)}\n`);
-}
-
-async function selectClaudeModel(): Promise<void> {
-  const spinner = ora('Fetching Claude models...').start();
-  const result = await fetchClaudeModels();
-  spinner.stop();
-
-  console.log(`  Models loaded ${sourceLabel(result.source)}`);
-
-  const config = loadConfig();
-  const chosen = await withSafeStdin(() =>
-    select({
-      message: 'Select Claude model:',
-      choices: [
-        { value: '', name: '(default - CLI built-in)' },
-        ...result.models.map((m) => ({
-          value: m.value,
-          name: config.claudeModel === m.value ? `${m.name} ${chalk.green('(current)')}` : m.name,
-        })),
-      ],
-      default: config.claudeModel,
-    }),
-  );
-
-  saveConfig({ claudeModel: chosen });
-  const label = chosen || '(default)';
-  console.log(`\n  ${chalk.green('OK')} Claude model set to ${chalk.bold(label)}\n`);
-}
-
-function handleRefresh(): void {
-  clearModelCache();
-  console.log(`\n  ${chalk.green('OK')} Model cache cleared.\n`);
-}
-
-function listModels(): void {
+function showCurrentModels(): void {
   const config = loadConfig();
   console.log(chalk.bold('\n  Current Models:\n'));
   console.log(
@@ -89,27 +50,49 @@ function listModels(): void {
   console.log(
     `  ${chalk.cyan('Claude')}: ${config.claudeModel || chalk.dim('(default - CLI built-in)')}`,
   );
-  console.log('');
+
+  console.log(chalk.bold('\n  Known Models:\n'));
+  console.log(`  ${chalk.cyan('Codex')}:  ${KNOWN_CODEX_MODELS.join(', ')}`);
+  console.log(`  ${chalk.cyan('Claude')}: ${KNOWN_CLAUDE_MODELS.join(', ')}`);
+
+  console.log(chalk.dim('\n  Usage: /model <codex|claude> <model-name|default>\n'));
 }
 
-export async function handleModel(args: string): Promise<void> {
-  const subcommand = args.trim().toLowerCase();
+function setModel(provider: Provider, modelName: string): void {
+  const value = modelName === 'default' ? '' : modelName;
+  const configKey = provider === 'codex' ? 'codexModel' : 'claudeModel';
 
-  switch (subcommand) {
-    case 'codex':
-      await selectCodexModel();
-      break;
-    case 'claude':
-      await selectClaudeModel();
-      break;
-    case 'refresh':
-      handleRefresh();
-      break;
-    case 'list':
-    case '':
-      listModels();
-      break;
-    default:
-      console.log('Usage: /model [codex|claude|list|refresh]');
+  saveConfig({ [configKey]: value });
+
+  const label = value || '(default)';
+  console.log(
+    `\n  ${chalk.green('OK')} ${chalk.cyan(provider)} model set to ${chalk.bold(label)}\n`,
+  );
+}
+
+export function handleModel(args: string): void {
+  const parts = args.trim().split(/\s+/);
+  const subcommand = parts[0]?.toLowerCase() ?? '';
+  const modelName = parts[1] ?? '';
+
+  if (subcommand === '' || subcommand === 'list') {
+    showCurrentModels();
+    return;
   }
+
+  if (subcommand !== 'codex' && subcommand !== 'claude') {
+    console.log(`\n  ${chalk.red('Unknown provider:')} ${subcommand}`);
+    console.log(chalk.dim('  Usage: /model <codex|claude> <model-name|default>\n'));
+    return;
+  }
+
+  if (!modelName) {
+    const known = subcommand === 'codex' ? KNOWN_CODEX_MODELS : KNOWN_CLAUDE_MODELS;
+    console.log(`\n  ${chalk.red('Model name required.')}`);
+    console.log(`  Known ${subcommand} models: ${known.join(', ')}`);
+    console.log(chalk.dim('  Usage: /model ' + subcommand + ' <model-name|default>\n'));
+    return;
+  }
+
+  setModel(subcommand, modelName);
 }
