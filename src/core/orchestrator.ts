@@ -67,6 +67,8 @@ export class DebateOrchestrator {
       prompts,
       options.attachments ?? [],
       participants,
+      options.snapshot,
+      options.newsMode,
     );
 
     if (this.sessionStore) {
