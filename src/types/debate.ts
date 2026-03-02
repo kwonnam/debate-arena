@@ -1,16 +1,28 @@
-export type ProviderName = 'codex' | 'claude';
+import type { EvidenceSnapshot } from '../news/snapshot.js';
+
+export type { EvidenceSnapshot };
+
+export type ProviderName = string;
 
 export type ParticipantName = ProviderName | 'user';
 
 export type OutputFormat = 'pretty' | 'json' | 'markdown';
 
-export type JudgeOption = 'codex' | 'claude' | 'both';
+export type JudgeOption = ProviderName | 'both';
 
 export type DebateMode = 'debate' | 'plan';
 
 export type ApplyTarget = ProviderName | 'both';
 
+export interface DebateAttachment {
+  name: string;
+  kind: 'text' | 'image';
+  mimeType: string;
+  content: string;
+}
+
 export interface DebateOptions {
+  sessionId?: string;
   question: string;
   rounds: number;
   stream: boolean;
@@ -20,6 +32,11 @@ export interface DebateOptions {
   projectContext?: string;
   mode?: DebateMode;
   interactive?: boolean;
+  participants?: [ProviderName, ProviderName];
+  signal?: AbortSignal;
+  executionCwd?: string;
+  attachments?: DebateAttachment[];
+  snapshot?: EvidenceSnapshot;
 }
 
 export interface DebateMessage {
