@@ -337,6 +337,47 @@ export function buildPlanApplyPrompt(
   ].join('\n');
 }
 
+export type RoundEvidenceMode = 'unified' | 'split-first' | 'split-second';
+
+export function buildRoundEvidenceSection(
+  mode: RoundEvidenceMode,
+  articles: NewsArticle[],
+): string {
+  if (articles.length === 0) return '';
+
+  let selected: NewsArticle[];
+  let label: string;
+
+  if (mode === 'unified') {
+    selected = articles;
+    label = '양측 공통 증거 (unified)';
+  } else {
+    const half = Math.ceil(articles.length / 2);
+    if (mode === 'split-first') {
+      selected = articles.slice(0, half);
+      label = '찬성 측 근거 (split)';
+    } else {
+      selected = articles.slice(half);
+      label = '반대 측 근거 (split)';
+    }
+  }
+
+  if (selected.length === 0) return '';
+
+  const lines = [
+    '',
+    `## 참고 뉴스 (${label})`,
+    '아래 기사를 근거로 활용하여 논증을 강화하십시오.',
+    '',
+    ...selected.map(
+      (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${a.summary}`
+    ),
+    '',
+  ];
+
+  return lines.join('\n');
+}
+
 // --- Mode Constants & Factories ---
 
 export const DEBATE_PROMPTS: PromptBuilders = {

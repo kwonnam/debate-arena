@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildSynthesisPrompt, buildSynthesisPromptWithEvidence } from './prompt-builder.js';
-import type { EvidenceSnapshot } from '../news/snapshot.js';
+import { buildSynthesisPrompt, buildSynthesisPromptWithEvidence, buildRoundEvidenceSection } from './prompt-builder.js';
+import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
 
 describe('buildSynthesisPromptWithEvidence', () => {
   const mockSnapshot: EvidenceSnapshot = {
@@ -44,5 +44,49 @@ describe('buildSynthesisPromptWithEvidence', () => {
     const withEvidence = buildSynthesisPromptWithEvidence('question', debateLog, undefined);
     const original = buildSynthesisPrompt('question', debateLog);
     expect(withEvidence).toBe(original);
+  });
+});
+
+const mockArticles: NewsArticle[] = [
+  {
+    title: 'Test Article',
+    source: 'Reuters',
+    url: 'https://reuters.com/test',
+    publishedAt: '2026-03-02',
+    summary: 'Test summary',
+    relevanceScore: 0.9,
+  },
+  {
+    title: 'Second Article',
+    source: 'Bloomberg',
+    url: 'https://bloomberg.com/test',
+    publishedAt: '2026-03-01',
+    summary: 'Second summary',
+    relevanceScore: 0.5,
+  },
+];
+
+describe('buildRoundEvidenceSection', () => {
+  it('unified 모드: 전체 기사를 반환한다', () => {
+    const result = buildRoundEvidenceSection('unified', mockArticles);
+    expect(result).toContain('Test Article');
+    expect(result).toContain('Second Article');
+  });
+
+  it('split-first: 상위 절반 기사만 반환한다', () => {
+    const result = buildRoundEvidenceSection('split-first', mockArticles);
+    expect(result).toContain('Test Article');
+    expect(result).not.toContain('Second Article');
+  });
+
+  it('split-second: 하위 절반 기사만 반환한다', () => {
+    const result = buildRoundEvidenceSection('split-second', mockArticles);
+    expect(result).not.toContain('Test Article');
+    expect(result).toContain('Second Article');
+  });
+
+  it('기사가 없으면 빈 문자열을 반환한다', () => {
+    const result = buildRoundEvidenceSection('unified', []);
+    expect(result).toBe('');
   });
 });
