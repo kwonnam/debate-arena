@@ -4,3 +4,13 @@ dist/
 *.tsbuildinfo
 
 .claude
+.DS_Store
+.idea/
+.omc/
+.omx/
+.sisyphus/
+ProviderFactory
+active
+collectProjectContext
+상태
+정책이
