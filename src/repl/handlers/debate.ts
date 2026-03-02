@@ -207,6 +207,7 @@ export async function handleDebate(
       interactive: isInteractive,
       participants: session.participants ? [...session.participants] as [ProviderName, ProviderName] : undefined,
       snapshot: session.snapshot,
+      newsMode: session.newsMode,
     };
 
     const callbacks = isPretty ? createPrettyCallbacks() : createSilentCallbacks();

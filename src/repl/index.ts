@@ -62,6 +62,7 @@ export async function startRepl(cliArgs?: CliArgs): Promise<void> {
     format: config.defaultFormat,
     stream: config.stream,
     newsQuiet: cliArgs?.newsQuiet,
+    newsMode: cliArgs?.newsMode,
   });
 
   // --news 또는 --news-snapshot 플래그 처리
