@@ -136,7 +136,7 @@ export function buildSynthesisPrompt(
   ].join('\n');
 }
 
-import type { EvidenceSnapshot } from '../news/snapshot.js';
+import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
 
 export function buildSynthesisPromptWithEvidence(
   question: string,
