@@ -1,4 +1,4 @@
-import type { JudgeOption, OutputFormat, ProviderName } from '../types/debate.js';
+import type { JudgeOption, OutputFormat, ProviderName, NewsMode } from '../types/debate.js';
 import type { EvidenceSnapshot } from '../news/snapshot.js';
 
 export interface SessionState {
@@ -12,6 +12,7 @@ export interface SessionState {
   readonly output?: string;
   readonly snapshot?: EvidenceSnapshot;
   readonly newsQuiet?: boolean;
+  readonly newsMode?: NewsMode;
 }
 
 export function createDefaultSession(overrides?: Partial<SessionState>): SessionState {
