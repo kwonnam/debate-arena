@@ -50,6 +50,7 @@ interface DebateExecutionInput {
   noContext?: boolean;
   executionCwd?: string;
   attachments?: DebateAttachmentInput[];
+  snapshotId?: string;
 }
 
 interface ExecuteRequestBody {
@@ -246,6 +247,20 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
     const questionWithAttachments = mergeQuestionWithAttachments(parsed.question, parsed.attachments);
 
+    // Load snapshot if snapshotId is provided
+    let snapshot: EvidenceSnapshot | undefined;
+    if (input.snapshotId && /^[\w-]{1,64}$/.test(input.snapshotId)) {
+      try {
+        const snapPath = join(SNAPSHOT_DIR, `snap-${input.snapshotId}.json`);
+        if (resolve(snapPath).startsWith(resolve(SNAPSHOT_DIR))) {
+          const raw = await readFile(snapPath, 'utf-8');
+          snapshot = JSON.parse(raw) as EvidenceSnapshot;
+        }
+      } catch {
+        // snapshot not found — proceed without it
+      }
+    }
+
     const timeoutMs = normalizeTimeoutMs(timeoutMsRaw);
     const controller = new AbortController();
     const sessionId = randomUUID();
@@ -278,6 +293,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       executionCwd,
       projectContext,
       attachments: parsed.attachments,
+      snapshot,
     };
 
     const orchestrator = new DebateOrchestrator(providerMap, sessionStore);
@@ -332,7 +348,13 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
   app.get('/api/snapshots/:id', async (c: Context) => {
     const id = c.req.param('id');
+    if (!/^[\w-]{1,64}$/.test(id)) {
+      return c.json({ error: 'Invalid snapshot ID' }, 400);
+    }
     const filePath = join(SNAPSHOT_DIR, `snap-${id}.json`);
+    if (!resolve(filePath).startsWith(resolve(SNAPSHOT_DIR))) {
+      return c.json({ error: 'Invalid snapshot ID' }, 400);
+    }
     try {
       const raw = await readFile(filePath, 'utf-8');
       const snap = JSON.parse(raw) as EvidenceSnapshot;
@@ -369,7 +391,13 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
   app.delete('/api/snapshots/:id', async (c: Context) => {
     const id = c.req.param('id');
+    if (!/^[\w-]{1,64}$/.test(id)) {
+      return c.json({ error: 'Invalid snapshot ID' }, 400);
+    }
     const filePath = join(SNAPSHOT_DIR, `snap-${id}.json`);
+    if (!resolve(filePath).startsWith(resolve(SNAPSHOT_DIR))) {
+      return c.json({ error: 'Invalid snapshot ID' }, 400);
+    }
     try {
       await unlink(filePath);
       return c.json({ ok: true });

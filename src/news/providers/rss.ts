@@ -53,7 +53,7 @@ export class RssProvider implements NewsProvider {
 
   constructor(private feedUrls: string[]) {}
 
-  async search(_query: string, _options?: SearchOptions): Promise<NewsArticle[]> {
+  async search(query: string, _options?: SearchOptions): Promise<NewsArticle[]> {
     if (this.feedUrls.length === 0) return [];
 
     const results = await Promise.all(
@@ -69,6 +69,22 @@ export class RssProvider implements NewsProvider {
       }),
     );
 
-    return results.flat();
+    const allArticles = results.flat();
+
+    if (query.trim()) {
+      const keywords = query.toLowerCase().split(/\s+/).filter((k) => k.length > 2);
+      if (keywords.length > 0) {
+        const filtered = allArticles.filter((article) =>
+          keywords.some(
+            (kw) =>
+              article.title.toLowerCase().includes(kw) ||
+              article.summary.toLowerCase().includes(kw),
+          ),
+        );
+        if (filtered.length > 0) return filtered;
+      }
+    }
+
+    return allArticles;
   }
 }

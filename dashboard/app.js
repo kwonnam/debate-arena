@@ -651,6 +651,8 @@ executeForm.addEventListener('submit', async (event) => {
   const filesInput = executeForm.querySelector('input[name="questionFiles"]');
   const { attachments, warnings } = await buildQuestionAttachments(filesInput?.files);
 
+  const snapshotId = debateSnapshotInput?.value?.trim() || '';
+
   await executeRunDebate({
     command: 'run_debate',
     timeoutMs: timeoutSeconds * 1000,
@@ -662,6 +664,7 @@ executeForm.addEventListener('submit', async (event) => {
       noContext,
       executionCwd: executionCwd || undefined,
       attachments,
+      snapshotId: snapshotId || undefined,
     },
   });
 

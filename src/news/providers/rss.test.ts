@@ -118,4 +118,31 @@ describe('RssProvider', () => {
 
     expect(result).toHaveLength(2);
   });
+
+  it('쿼리 키워드로 기사를 필터링한다', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => SAMPLE_RSS,
+    });
+
+    const provider = new RssProvider(['https://example.com/feed.rss']);
+    // "Article" appears in first article title only — "second" in second article title
+    const result = await provider.search('second');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('Second Article');
+  });
+
+  it('쿼리가 매칭되는 기사가 없으면 모든 기사를 반환한다', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => SAMPLE_RSS,
+    });
+
+    const provider = new RssProvider(['https://example.com/feed.rss']);
+    const result = await provider.search('xyznotexist');
+
+    // No match → return all articles as fallback
+    expect(result).toHaveLength(2);
+  });
 });
