@@ -1,7 +1,7 @@
 ﻿import chalk from 'chalk';
 import ora from 'ora';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import type {
   ApplyTarget,
   DebateMode,
@@ -9,13 +9,13 @@ import type {
   DebateResult,
   ProviderName,
 } from '../../types/debate.js';
-import { createProviders, createApplyProvider } from '../../providers/factory.js';
+import { createProviderMap, createApplyProvider } from '../../providers/factory.js';
 import { DebateOrchestrator } from '../../core/orchestrator.js';
 import { Applier } from '../../core/applier.js';
 import { getApplyPromptBuilder, type ApplyPromptBuilder } from '../../core/prompt-builder.js';
 import { loadConfig } from '../../config/manager.js';
 import { showQuestion } from '../../ui/banner.js';
-import { createPrettyCallbacks, createSilentCallbacks, renderResult } from '../../ui/renderer.js';
+import { createPrettyCallbacks, createSilentCallbacks, renderResult, buildMarkdownContent } from '../../ui/renderer.js';
 import { writeToken, endStream } from '../../ui/streamer.js';
 import { collectProjectContext } from '../../core/project-context.js';
 import { withSafeStdin } from '../tty-state.js';
@@ -190,20 +190,23 @@ export async function handleDebate(
       spinner?.start('Connecting to local agent CLIs...');
     }
 
-    const providers = createProviders();
+    const judge = session.judge || config.defaultJudge;
+    const providerMap = createProviderMap(session.participants, judge);
     spinner?.succeed('Connected to local agent CLIs');
 
-    const orchestrator = new DebateOrchestrator(providers.codex, providers.claude);
+    const orchestrator = new DebateOrchestrator(providerMap);
     const options: DebateOptions = {
       question: topic,
       rounds: session.rounds || config.defaultRounds,
       stream: session.stream,
       synthesis: true,
-      judge: session.judge || config.defaultJudge,
+      judge,
       format,
       projectContext: projectContext || undefined,
       mode,
       interactive: isInteractive,
+      participants: session.participants ? [...session.participants] as [ProviderName, ProviderName] : undefined,
+      snapshot: session.snapshot,
     };
 
     const callbacks = isPretty ? createPrettyCallbacks() : createSilentCallbacks();
@@ -239,6 +242,18 @@ export async function handleDebate(
       renderResult(result, format);
     } else {
       console.log('\nDebate complete.\n');
+    }
+
+    if (session.output) {
+      try {
+        writeFileSync(session.output, buildMarkdownContent(result), 'utf-8');
+        if (isPretty) {
+          console.log(chalk.green(`  Saved to ${session.output}\n`));
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(chalk.red(`  Failed to save output: ${msg}\n`));
+      }
     }
 
     if (mode === 'plan' && isPretty) {
