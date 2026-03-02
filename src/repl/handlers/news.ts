@@ -1,7 +1,9 @@
 import chalk from 'chalk';
+import { select } from '@inquirer/prompts';
 import { collectEvidence } from '../../news/index.js';
 import type { EvidenceSnapshot } from '../../news/snapshot.js';
 import type { SessionState } from '../session.js';
+import type { NewsMode } from '../../types/debate.js';
 
 export async function handleNews(
   args: string,
@@ -23,9 +25,24 @@ export async function handleNews(
       printSnapshot(snapshot);
     }
 
-    const updatedSession: SessionState = { ...session, snapshot };
     console.log(`  ${chalk.green('✓')} 스냅샷 저장됨 (ID: ${snapshot.id})`);
-    console.log(`  다음 토론부터 이 증거가 사용됩니다.\n`);
+
+    // Mode selection
+    let newsMode: NewsMode = 'unified';
+    try {
+      newsMode = await select<NewsMode>({
+        message: '뉴스 주입 모드를 선택하세요:',
+        choices: [
+          { name: 'unified  — 양측 동일 기사 (기본값)', value: 'unified' },
+          { name: 'split    — 찬반 역할 분리', value: 'split' },
+        ],
+      });
+    } catch {
+      // Non-TTY fallback: use unified
+    }
+
+    const updatedSession: SessionState = { ...session, snapshot, newsMode };
+    console.log(`  ${chalk.green('✓')} ${newsMode} 모드 설정됨. 다음 토론부터 적용됩니다.\n`);
 
     return { session: updatedSession };
   } catch (error) {
