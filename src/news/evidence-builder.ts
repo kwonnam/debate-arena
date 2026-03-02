@@ -5,8 +5,9 @@ import { createSnapshotId } from './snapshot.js';
 export class EvidenceBuilder {
   constructor(private providers: NewsProvider[]) {}
 
-  async build(query: string, options?: SearchOptions): Promise<EvidenceSnapshot> {
+  async build(query: string, options?: SearchOptions & { deduplication?: boolean }): Promise<EvidenceSnapshot> {
     const maxArticles = options?.maxArticles ?? 10;
+    const deduplication = options?.deduplication ?? true;
 
     // 1. 모든 provider에서 병렬 수집
     const results = await Promise.allSettled(
@@ -20,16 +21,23 @@ export class EvidenceBuilder {
       }
     }
 
-    // 2. URL 기준 중복 제거
-    const seen = new Set<string>();
-    const unique: NewsArticle[] = [];
-    for (const article of allArticles) {
-      if (!seen.has(article.url)) {
-        seen.add(article.url);
-        unique.push(article);
+    // 2. URL 기준 중복 제거 (deduplication 플래그에 따라)
+    let unique: NewsArticle[];
+    let excludedCount: number;
+    if (deduplication) {
+      const seen = new Set<string>();
+      unique = [];
+      for (const article of allArticles) {
+        if (!seen.has(article.url)) {
+          seen.add(article.url);
+          unique.push(article);
+        }
       }
+      excludedCount = allArticles.length - unique.length;
+    } else {
+      unique = allArticles;
+      excludedCount = 0;
     }
-    const excludedCount = allArticles.length - unique.length;
 
     // 3. relevanceScore 내림차순 정렬, 상위 N개
     const sorted = unique

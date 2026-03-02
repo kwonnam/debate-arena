@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { showBanner } from '../ui/banner.js';
-import { loadConfig } from '../config/manager.js';
+import { loadConfig, loadConfigV2 } from '../config/manager.js';
+import { DEFAULT_NEWS_CONFIG } from '../config/defaults.js';
 import { parseInput, type ParsedCommand } from './parser.js';
 import { createDefaultSession, type SessionState } from './session.js';
 import { getHandler, isDebateCommand, runDebateFromSlash } from './registry.js';
@@ -74,10 +75,12 @@ export async function startRepl(cliArgs?: CliArgs): Promise<void> {
     } else {
       try {
         console.log(`  ${chalk.cyan('📰')} 뉴스 수집 중...\n`);
+        const configV2 = loadConfigV2();
+        const newsConfig = configV2.news ?? DEFAULT_NEWS_CONFIG;
         const snapshot = await collectEvidence(query, {
           snapshotFile: cliArgs.newsSnapshot,
           quiet: cliArgs.newsQuiet,
-        });
+        }, newsConfig);
         if (!cliArgs.newsQuiet) {
           console.log(`  수집된 기사 (${snapshot.articles.length}건):`);
           snapshot.articles.forEach((a, i) => {

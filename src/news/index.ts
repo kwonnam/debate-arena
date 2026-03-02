@@ -74,7 +74,7 @@ export async function collectEvidence(
   };
 
   const builder = new EvidenceBuilder(providers);
-  const snapshot = await builder.build(query, searchOptions);
+  const snapshot = await builder.build(query, { ...searchOptions, deduplication: cfg.deduplication });
 
   // 자동 저장
   await writeSnapshot(snapshot, options?.snapshotDir);

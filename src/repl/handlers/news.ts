@@ -4,6 +4,8 @@ import { collectEvidence } from '../../news/index.js';
 import type { EvidenceSnapshot } from '../../news/snapshot.js';
 import type { SessionState } from '../session.js';
 import type { NewsMode } from '../../types/debate.js';
+import { loadConfigV2 } from '../../config/manager.js';
+import { DEFAULT_NEWS_CONFIG } from '../../config/defaults.js';
 
 export async function handleNews(
   args: string,
@@ -19,7 +21,9 @@ export async function handleNews(
 
   try {
     console.log(`\n  ${chalk.cyan('📰')} 뉴스 수집 중... (Brave Search)\n`);
-    const snapshot = await collectEvidence(query);
+    const configV2 = loadConfigV2();
+    const newsConfig = configV2.news ?? DEFAULT_NEWS_CONFIG;
+    const snapshot = await collectEvidence(query, undefined, newsConfig);
 
     if (!session.newsQuiet) {
       printSnapshot(snapshot);
