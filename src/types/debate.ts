@@ -12,6 +12,8 @@ export type JudgeOption = ProviderName | 'both';
 
 export type DebateMode = 'debate' | 'plan';
 
+export type NewsMode = 'unified' | 'split';
+
 export type ApplyTarget = ProviderName | 'both';
 
 export interface DebateAttachment {
@@ -37,6 +39,7 @@ export interface DebateOptions {
   executionCwd?: string;
   attachments?: DebateAttachment[];
   snapshot?: EvidenceSnapshot;
+  newsMode?: NewsMode;
 }
 
 export interface DebateMessage {
