@@ -261,6 +261,9 @@ ffm > /exit                            # Quit
 | `--no-synthesis` | Skip final synthesis | - |
 | `--no-context` | Disable project context collection | - |
 | `--files <paths...>` | Include specific files as context | - |
+| `--news [query]` | Collect news evidence before debate | - |
+| `--news-quiet` | Suppress article listing | - |
+| `--news-snapshot <path>` | Reuse a saved snapshot file | - |
 
 ## REPL Commands
 
@@ -276,6 +279,7 @@ ffm > /exit                            # Quit
 | `/context` | Toggle project context collection. Alias: `/nocontext` |
 | `/participants <p1> <p2>` | Set debate participants by provider id (e.g., `ollama-local cloud-gpt`) |
 | `/output <path>` | Save debate to a markdown file |
+| `/news <query>` | Collect news articles as debate evidence |
 | `/model codex <name>` | Set Codex model |
 | `/model claude <name>` | Set Claude model |
 | `/model list` | Show configured models |
@@ -334,6 +338,76 @@ export OLLAMA_MODEL="llava"
 - **Stop All Running Sessions** (dashboard button): cancels every running dashboard session
 - **`/stop team`** (REPL): stops all local dashboard sessions and the local dashboard server in current process
 - **`/stop`** (REPL): performs team stop first, then stops other running fight-for-me processes (legacy process scan behavior)
+
+## News Evidence
+
+fight-for-me can collect real-time news articles and inject them as evidence into the debate, so the AIs argue based on actual recent information.
+
+### Supported news providers
+
+| Provider | Env var | Notes |
+|----------|---------|-------|
+| **Brave Search** (default) | `BRAVE_API_KEY` | Free tier available at brave.com/search/api |
+| **NewsAPI** | `NEWS_API_KEY` | newsapi.org |
+| **RSS feeds** | — | Any public RSS/Atom URL |
+
+### Collect news before a debate
+
+```bash
+# One-shot: collect news then debate
+ffm "Will the Fed cut rates this year?" --news
+
+# Suppress article listing (quiet mode)
+ffm "Impact of AI on jobs" --news --news-quiet
+
+# Reuse a previously saved snapshot
+ffm "Follow-up question" --news-snapshot ./ffm-snapshots/snap-abc123.json
+```
+
+### Collect news inside REPL
+
+```bash
+ffm > /news federal reserve rate cut 2026
+# → fetches articles, saves snapshot, injects into next debate
+
+ffm > Federal Reserve가 금리를 내릴까?
+# → AIs debate using the collected articles as evidence
+```
+
+### News debate modes
+
+- **unified** — all evidence is shared with both participants at once
+- **split** — each participant sees evidence relevant to their side
+
+### News tab in Dashboard
+
+Open the dashboard (`/dashboard`) and click the **News** tab to:
+- Browse the saved snapshot library
+- Inspect individual articles per snapshot
+- Launch a debate directly from a snapshot
+
+### Configure news providers (`config.v2.json`)
+
+```json
+{
+  "news": {
+    "providers": {
+      "brave":   { "enabled": true },
+      "newsapi": { "enabled": false },
+      "rss":     { "enabled": true, "feeds": ["https://feeds.bbci.co.uk/news/rss.xml"] }
+    },
+    "maxArticlesPerProvider": 10,
+    "deduplication": true
+  }
+}
+```
+
+```bash
+export BRAVE_API_KEY="BSA..."
+export NEWS_API_KEY="..."    # only if newsapi is enabled
+```
+
+---
 
 ## Configuration
 

@@ -261,6 +261,9 @@ ffm > /exit                                  # 종료
 | `--no-synthesis` | 최종 합의 도출 건너뛰기 | - |
 | `--no-context` | 프로젝트 컨텍스트 수집 비활성화 | - |
 | `--files <paths...>` | 컨텍스트에 특정 파일 포함 | - |
+| `--news [query]` | 토론 전 뉴스 증거 수집 | - |
+| `--news-quiet` | 기사 목록 출력 생략 | - |
+| `--news-snapshot <path>` | 기존 스냅샷 파일 재사용 | - |
 
 ## REPL 명령어
 
@@ -276,6 +279,7 @@ ffm > /exit                                  # 종료
 | `/context` | 프로젝트 컨텍스트 수집 토글. 별칭: `/nocontext` |
 | `/participants <p1> <p2>` | provider id로 참가자 설정 (예: `ollama-local cloud-gpt`) |
 | `/output <경로>` | 토론 내용을 마크다운 파일로 저장 |
+| `/news <query>` | 뉴스 기사를 토론 증거로 수집 |
 | `/model codex <name>` | Codex 모델 설정 |
 | `/model claude <name>` | Claude 모델 설정 |
 | `/model list` | 현재 설정된 모델 표시 |
@@ -284,6 +288,76 @@ ffm > /exit                                  # 종료
 | `/stop` | 실행 중인 fight-for-me 프로세스 중지 |
 | `/help` | 도움말 표시 |
 | `/exit` | REPL 종료. 별칭: `/quit` |
+
+## 뉴스 증거 (News Evidence)
+
+fight-for-me는 실시간 뉴스 기사를 수집해 토론 증거로 주입할 수 있습니다. AI들이 최신 실제 정보를 바탕으로 논쟁하게 됩니다.
+
+### 지원 뉴스 provider
+
+| Provider | 환경변수 | 비고 |
+|----------|---------|------|
+| **Brave Search** (기본) | `BRAVE_API_KEY` | brave.com/search/api 무료 티어 |
+| **NewsAPI** | `NEWS_API_KEY` | newsapi.org |
+| **RSS 피드** | — | 공개 RSS/Atom URL 지원 |
+
+### 토론 전 뉴스 수집 (CLI)
+
+```bash
+# 뉴스 수집 후 토론
+ffm "올해 Fed가 금리를 내릴까?" --news
+
+# 기사 목록 출력 생략
+ffm "AI가 일자리에 미치는 영향" --news --news-quiet
+
+# 이전에 저장한 스냅샷 재사용
+ffm "후속 질문" --news-snapshot ./ffm-snapshots/snap-abc123.json
+```
+
+### REPL에서 뉴스 수집
+
+```bash
+ffm > /news 연준 금리 인하 2026
+# → 기사 수집 → 스냅샷 저장 → 다음 토론에 주입
+
+ffm > 연준이 금리를 내릴까?
+# → 수집된 기사를 증거로 AI들이 토론
+```
+
+### 뉴스 토론 모드
+
+- **unified** — 모든 증거를 양측 참가자에게 동시 제공
+- **split** — 각 참가자의 입장에 맞는 증거만 제공
+
+### 대시보드 News 탭
+
+`/dashboard` 실행 후 **News** 탭에서:
+- 저장된 스냅샷 라이브러리 탐색
+- 스냅샷별 기사 상세 조회
+- 스냅샷에서 바로 토론 시작
+
+### config.v2.json 뉴스 설정
+
+```json
+{
+  "news": {
+    "providers": {
+      "brave":   { "enabled": true },
+      "newsapi": { "enabled": false },
+      "rss":     { "enabled": true, "feeds": ["https://feeds.bbci.co.uk/news/rss.xml"] }
+    },
+    "maxArticlesPerProvider": 10,
+    "deduplication": true
+  }
+}
+```
+
+```bash
+export BRAVE_API_KEY="BSA..."
+export NEWS_API_KEY="..."    # newsapi 활성화 시에만 필요
+```
+
+---
 
 ## 설정
 
