@@ -1,7 +1,10 @@
+// ── DOM references ────────────────────────────────────────────────────────────
+
 const sessionList = document.getElementById('session-list');
 const streamBox = document.getElementById('stream');
 const timelineBox = document.getElementById('timeline');
 const synthesisBox = document.getElementById('synthesis');
+const synthesisSection = document.getElementById('synthesis-section');
 const configStateBox = document.getElementById('config-state');
 const refreshButton = document.getElementById('refresh');
 const replayButton = document.getElementById('replay');
@@ -13,21 +16,78 @@ const executeStatus = document.getElementById('execute-status');
 const stopSessionButton = document.getElementById('stop-session');
 const stopTeamButton = document.getElementById('stop-team');
 const exportMarkdownButton = document.getElementById('export-md');
+const connBadge = document.getElementById('conn-badge');
+const roundProgress = document.getElementById('round-progress');
+const roundLabel = document.getElementById('round-label');
+const roundFill = document.getElementById('round-fill');
+const gapBanner = document.getElementById('gap-banner');
+const typingIndicator = document.getElementById('typing-indicator');
+const drawerToggle = document.getElementById('drawer-toggle');
+const drawerContent = document.getElementById('drawer-content');
+const drawerChevron = document.getElementById('drawer-chevron');
 const participantASelect = executeForm.querySelector('select[name="participantA"]');
 const participantBSelect = executeForm.querySelector('select[name="participantB"]');
 const judgeSelect = executeForm.querySelector('select[name="judge"]');
 
+// ── State ─────────────────────────────────────────────────────────────────────
+
 let activeSessionId = null;
 let eventSource = null;
 let lastSequence = 0;
-let streamMessages = [];
+let renderedSequences = new Set();
+let bubbleMessages = []; // { provider, content, side }
 let timelineEntries = [];
 let synthesisContent = '';
 let cachedSessions = [];
+let currentParticipantA = 'codex';
+let currentParticipantB = 'claude';
+let totalRounds = 3;
+let currentRound = 0;
+let streamingProvider = null;
+let isDrawerOpen = true;
+
+// Connection state machine: idle | connecting | live | reconnecting | stalled
+let connState = 'idle';
+let reconnectTimer = null;
+let stalledTimer = null;
 
 const MAX_FILES = 6;
 const MAX_TEXT_FILE_CHARS = 12_000;
 const MAX_IMAGE_DATA_URL_CHARS = 180_000;
+
+// ── Connection State Machine ──────────────────────────────────────────────────
+
+function setConnState(state) {
+  connState = state;
+  connBadge.className = `conn-badge state-${state}`;
+
+  const labels = {
+    idle: '⚪ Idle',
+    connecting: '🔵 Connecting...',
+    live: '🟢 Live',
+    reconnecting: '🟡 Reconnecting...',
+    stalled: '🔴 Stalled',
+  };
+
+  connBadge.textContent = labels[state] || state;
+
+  // Clear stalled timer on live
+  if (state === 'live') {
+    clearTimeout(stalledTimer);
+    stalledTimer = null;
+  }
+}
+
+function startStalledTimer() {
+  clearTimeout(stalledTimer);
+  stalledTimer = setTimeout(() => {
+    if (connState === 'live' || connState === 'reconnecting') {
+      setConnState('stalled');
+    }
+  }, 30000);
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
@@ -70,14 +130,8 @@ function markdownToHtml(markdown) {
   let inOl = false;
 
   const closeLists = () => {
-    if (inUl) {
-      html.push('</ul>');
-      inUl = false;
-    }
-    if (inOl) {
-      html.push('</ol>');
-      inOl = false;
-    }
+    if (inUl) { html.push('</ul>'); inUl = false; }
+    if (inOl) { html.push('</ol>'); inOl = false; }
   };
 
   for (const line of lines) {
@@ -93,23 +147,11 @@ function markdownToHtml(markdown) {
       continue;
     }
 
-    if (inCode) {
-      codeLines.push(line);
-      continue;
-    }
+    if (inCode) { codeLines.push(line); continue; }
 
     const trimmed = line.trim();
-
-    if (trimmed === '') {
-      closeLists();
-      continue;
-    }
-
-    if (/^-{3,}$/.test(trimmed)) {
-      closeLists();
-      html.push('<hr />');
-      continue;
-    }
+    if (trimmed === '') { closeLists(); continue; }
+    if (/^-{3,}$/.test(trimmed)) { closeLists(); html.push('<hr />'); continue; }
 
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
     if (heading) {
@@ -121,28 +163,16 @@ function markdownToHtml(markdown) {
 
     const unordered = line.match(/^\s*[-*]\s+(.+)$/);
     if (unordered) {
-      if (inOl) {
-        html.push('</ol>');
-        inOl = false;
-      }
-      if (!inUl) {
-        html.push('<ul>');
-        inUl = true;
-      }
+      if (inOl) { html.push('</ol>'); inOl = false; }
+      if (!inUl) { html.push('<ul>'); inUl = true; }
       html.push(`<li>${renderInlineMarkdown(unordered[1])}</li>`);
       continue;
     }
 
     const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
     if (ordered) {
-      if (inUl) {
-        html.push('</ul>');
-        inUl = false;
-      }
-      if (!inOl) {
-        html.push('<ol>');
-        inOl = true;
-      }
+      if (inUl) { html.push('</ul>'); inUl = false; }
+      if (!inOl) { html.push('<ol>'); inOl = true; }
       html.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`);
       continue;
     }
@@ -159,7 +189,6 @@ function markdownToHtml(markdown) {
   }
 
   closeLists();
-
   if (inCode) {
     html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
   }
@@ -175,63 +204,110 @@ function renderMarkdown(target, markdown, fallbackText) {
   target.innerHTML = `<div class="markdown-body">${markdownToHtml(markdown)}</div>`;
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.readAsDataURL(file);
-  });
+// ── Provider side detection ───────────────────────────────────────────────────
+
+function getProviderSide(provider) {
+  const normalized = String(provider || '').toLowerCase();
+  if (normalized === currentParticipantA.toLowerCase()) return 'a';
+  if (normalized === currentParticipantB.toLowerCase()) return 'b';
+  // Fallback: alternate based on known providers
+  return 'a';
 }
 
-function resolveAttachmentKind(file) {
-  if (file.type && file.type.startsWith('image/')) {
-    return 'image';
-  }
-  return 'text';
-}
+// ── Bubble Stream Rendering ───────────────────────────────────────────────────
 
-async function buildQuestionAttachments(fileList) {
-  const files = Array.from(fileList || []).slice(0, MAX_FILES);
-  const attachments = [];
-  const warnings = [];
+function appendBubble(provider, text) {
+  const normalizedProvider = String(provider || 'unknown');
+  const token = String(text || '');
+  const last = bubbleMessages.at(-1);
 
-  for (const file of files) {
-    const kind = resolveAttachmentKind(file);
-    try {
-      if (kind === 'image') {
-        const dataUrl = await fileToDataUrl(file);
-        const content = dataUrl.slice(0, MAX_IMAGE_DATA_URL_CHARS);
-        attachments.push({
-          name: file.name,
-          kind,
-          mimeType: file.type || 'image/unknown',
-          content,
-        });
-        if (dataUrl.length > MAX_IMAGE_DATA_URL_CHARS) {
-          warnings.push(`${file.name}: image payload truncated`);
-        }
-        continue;
-      }
-
-      const text = await file.text();
-      const content = text.slice(0, MAX_TEXT_FILE_CHARS);
-      attachments.push({
-        name: file.name,
-        kind,
-        mimeType: file.type || 'text/plain',
-        content,
-      });
-      if (text.length > MAX_TEXT_FILE_CHARS) {
-        warnings.push(`${file.name}: text truncated`);
-      }
-    } catch {
-      warnings.push(`${file.name}: failed to read`);
-    }
+  if (last && last.provider === normalizedProvider) {
+    last.content += token;
+  } else {
+    const side = getProviderSide(normalizedProvider);
+    bubbleMessages.push({ provider: normalizedProvider, content: token, side });
   }
 
-  return { attachments, warnings };
+  streamingProvider = normalizedProvider;
+  typingIndicator.style.display = 'flex';
+  renderBubbles();
+  streamBox.scrollTop = streamBox.scrollHeight;
 }
+
+function stopTyping() {
+  streamingProvider = null;
+  typingIndicator.style.display = 'none';
+}
+
+function renderBubbles() {
+  if (bubbleMessages.length === 0) {
+    streamBox.innerHTML = '<div class="stream-empty">Waiting for debate to start...</div>';
+    return;
+  }
+
+  streamBox.innerHTML = bubbleMessages
+    .map((msg) => {
+      const sideClass = `side-${msg.side}`;
+      const htmlContent = markdownToHtml(msg.content);
+      return `
+        <div class="bubble-wrapper ${sideClass}">
+          <div class="bubble-provider">${escapeHtml(msg.provider)}</div>
+          <div class="bubble">
+            <div class="markdown-body">${htmlContent}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  streamBox.scrollTop = streamBox.scrollHeight;
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────────
+
+function renderTimeline() {
+  timelineBox.innerHTML = timelineEntries
+    .map((entry) => `<div class="timeline-entry ${entry.type || ''}">${escapeHtml(entry.text)}</div>`)
+    .join('');
+  timelineBox.scrollTop = timelineBox.scrollHeight;
+}
+
+function addTimelineEntry(text, type = '') {
+  timelineEntries.push({ text, type });
+  renderTimeline();
+}
+
+// ── Round Progress ────────────────────────────────────────────────────────────
+
+function updateRoundProgress(round, total) {
+  currentRound = round;
+  if (total) totalRounds = total;
+
+  roundProgress.style.display = 'flex';
+  roundLabel.textContent = `Round ${round} / ${totalRounds}`;
+  const pct = totalRounds > 0 ? Math.min(100, (round / totalRounds) * 100) : 0;
+  roundFill.style.width = `${pct}%`;
+}
+
+// ── Synthesis ─────────────────────────────────────────────────────────────────
+
+function renderSynthesis() {
+  if (!synthesisContent || synthesisSection === null) return;
+
+  synthesisSection.style.display = 'block';
+
+  if (!synthesisContent || synthesisContent === 'Synthesizing...') {
+    synthesisBox.innerHTML = `<div class="markdown-body"><p><em>Synthesizing final verdict...</em></p></div>`;
+    return;
+  }
+
+  synthesisBox.innerHTML = `<div class="markdown-body">${markdownToHtml(synthesisContent)}</div>`;
+
+  // Scroll synthesis into view
+  synthesisSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Session List ──────────────────────────────────────────────────────────────
 
 function renderSessions(sessions) {
   if (!sessions || sessions.length === 0) {
@@ -244,7 +320,7 @@ function renderSessions(sessions) {
       const active = session.sessionId === activeSessionId ? 'active' : '';
       return `
         <div class="session-item ${active}" data-session-id="${session.sessionId}">
-          <strong>${session.question}</strong>
+          <strong style="font-size:12px">${escapeHtml(session.question)}</strong>
           <div class="session-meta">${session.status} · ${session.eventCount} events · ${formatTime(session.updatedAt)}</div>
         </div>
       `;
@@ -259,59 +335,85 @@ function renderSessions(sessions) {
   });
 }
 
-function appendStream(provider, text) {
-  const normalizedProvider = String(provider || 'unknown');
-  const token = String(text || '');
-  const last = streamMessages.at(-1);
+// ── File Attachments ──────────────────────────────────────────────────────────
 
-  if (last && last.provider === normalizedProvider) {
-    last.content += token;
-  } else {
-    streamMessages.push({ provider: normalizedProvider, content: token });
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+}
+
+function resolveAttachmentKind(file) {
+  if (file.type && file.type.startsWith('image/')) return 'image';
+  return 'text';
+}
+
+async function buildQuestionAttachments(fileList) {
+  const files = Array.from(fileList || []).slice(0, MAX_FILES);
+  const attachments = [];
+  const warnings = [];
+
+  for (const file of files) {
+    const kind = resolveAttachmentKind(file);
+    try {
+      if (kind === 'image') {
+        const dataUrl = await fileToDataUrl(file);
+        const content = dataUrl.slice(0, MAX_IMAGE_DATA_URL_CHARS);
+        attachments.push({ name: file.name, kind, mimeType: file.type || 'image/unknown', content });
+        if (dataUrl.length > MAX_IMAGE_DATA_URL_CHARS) warnings.push(`${file.name}: image payload truncated`);
+        continue;
+      }
+
+      const text = await file.text();
+      const content = text.slice(0, MAX_TEXT_FILE_CHARS);
+      attachments.push({ name: file.name, kind, mimeType: file.type || 'text/plain', content });
+      if (text.length > MAX_TEXT_FILE_CHARS) warnings.push(`${file.name}: text truncated`);
+    } catch {
+      warnings.push(`${file.name}: failed to read`);
+    }
   }
 
-  renderStream();
-  streamBox.scrollTop = streamBox.scrollHeight;
+  return { attachments, warnings };
 }
 
-function renderTimeline() {
-  timelineBox.innerHTML = timelineEntries
-    .map((entry) => `<div>${escapeHtml(entry)}</div>`)
-    .join('');
-  timelineBox.scrollTop = timelineBox.scrollHeight;
-}
-
-function renderStream() {
-  if (streamMessages.length === 0) {
-    renderMarkdown(streamBox, '', 'Waiting for stream...');
-    return;
-  }
-
-  const markdown = streamMessages
-    .map((message) => `### ${message.provider}\n\n${message.content}`)
-    .join('\n\n---\n\n');
-
-  renderMarkdown(streamBox, markdown, 'Waiting for stream...');
-}
-
-function renderSynthesis() {
-  renderMarkdown(synthesisBox, synthesisContent, 'Waiting for synthesis...');
-}
+// ── Event Envelope Handler ────────────────────────────────────────────────────
 
 function handleEnvelope(envelope) {
-  lastSequence = Math.max(lastSequence, envelope.sequence);
+  const seq = envelope.sequence;
+
+  // Idempotency: skip already-rendered sequences
+  if (renderedSequences.has(seq)) return;
+  renderedSequences.add(seq);
+
+  lastSequence = Math.max(lastSequence, seq);
   const { event } = envelope;
 
+  // Reset stalled timer on any event
+  startStalledTimer();
+  if (connState === 'reconnecting' || connState === 'connecting') {
+    setConnState('live');
+  }
+
   if (event.type === 'round_started') {
-    timelineEntries.push(`Round ${event.payload.round} started (${formatTime(event.timestamp)})`);
+    const round = event.payload.round;
+    const total = event.payload.totalRounds || totalRounds;
+    updateRoundProgress(round, total);
+    addTimelineEntry(`Round ${round} started (${formatTime(event.timestamp)})`, 'round-start');
   }
 
   if (event.type === 'agent_chunk') {
-    appendStream(event.payload.provider, event.payload.token);
+    appendBubble(event.payload.provider, event.payload.token);
   }
 
   if (event.type === 'round_finished') {
-    timelineEntries.push(`Round ${event.payload.round} finished (${event.payload.messages.length} messages)`);
+    stopTyping();
+    addTimelineEntry(
+      `Round ${event.payload.round} finished (${event.payload.messages.length} messages)`,
+      'round-end'
+    );
   }
 
   if (event.type === 'synthesis_ready') {
@@ -319,30 +421,53 @@ function handleEnvelope(envelope) {
       synthesisContent = 'Synthesizing...';
     } else if (event.payload.content) {
       synthesisContent = event.payload.content;
+      stopTyping();
     }
+    renderSynthesis();
   }
 
   if (event.type === 'error') {
-    timelineEntries.push(`Error: ${event.payload.code}`);
+    addTimelineEntry(`Error: ${event.payload.code}`, 'error');
+    setConnState('stalled');
   }
 
   if (event.type === 'cancelled') {
-    timelineEntries.push(`Cancelled: ${event.payload.reason}`);
+    addTimelineEntry(`Cancelled: ${event.payload.reason}`, 'error');
+    setConnState('idle');
+    stopTyping();
+    roundProgress.style.display = 'none';
   }
-
-  renderTimeline();
-  renderSynthesis();
 }
+
+// ── Event Replay ──────────────────────────────────────────────────────────────
 
 async function replayEvents(fromSequence) {
   if (!activeSessionId) return;
   const { data, ok } = await fetchJson(`/api/sessions/${activeSessionId}/events?fromSequence=${fromSequence}`);
   if (!ok) return;
+
+  // Handle hasGap: auto full replay
+  if (data.hasGap && fromSequence > 1) {
+    gapBanner.style.display = 'block';
+    setTimeout(() => { gapBanner.style.display = 'none'; }, 5000);
+    // Full replay from 1
+    const { data: fullData, ok: fullOk } = await fetchJson(`/api/sessions/${activeSessionId}/events?fromSequence=1`);
+    if (fullOk) fullData.events.forEach(handleEnvelope);
+    return;
+  }
+
   data.events.forEach(handleEnvelope);
 }
 
+// ── SSE Stream ────────────────────────────────────────────────────────────────
+
 function connectStream(sessionId) {
-  if (eventSource) eventSource.close();
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+
+  setConnState('connecting');
   eventSource = new EventSource(`/api/sessions/${sessionId}/stream`);
 
   eventSource.addEventListener('debate', (event) => {
@@ -350,30 +475,73 @@ function connectStream(sessionId) {
       const envelope = JSON.parse(event.data);
       handleEnvelope(envelope);
     } catch {
-      return;
+      // ignore parse errors
     }
   });
+
+  eventSource.addEventListener('hello', () => {
+    setConnState('live');
+    startStalledTimer();
+  });
+
+  eventSource.addEventListener('ping', () => {
+    startStalledTimer();
+    if (connState === 'stalled' || connState === 'reconnecting') {
+      setConnState('live');
+    }
+  });
+
+  eventSource.onerror = () => {
+    setConnState('reconnecting');
+    // EventSource auto-reconnects; we just update the badge
+  };
+
+  eventSource.onopen = () => {
+    setConnState('live');
+    startStalledTimer();
+  };
 }
+
+// ── Session Selection ─────────────────────────────────────────────────────────
 
 async function selectSession(sessionId) {
   activeSessionId = sessionId;
   lastSequence = 0;
-  streamMessages = [];
+  renderedSequences = new Set();
+  bubbleMessages = [];
   timelineEntries = [];
   synthesisContent = '';
-  renderStream();
-  renderSynthesis();
+  currentRound = 0;
+
+  // Hide synthesis hero until synthesis arrives
+  if (synthesisSection) synthesisSection.style.display = 'none';
+  roundProgress.style.display = 'none';
+
+  renderBubbles();
   renderTimeline();
+  renderSynthesis();
+
+  // Extract participants from session to determine bubble sides
+  const session = cachedSessions.find((s) => s.sessionId === sessionId);
+  if (session?.participants?.length >= 2) {
+    currentParticipantA = session.participants[0];
+    currentParticipantB = session.participants[1];
+  }
+
   await replayEvents(1);
   connectStream(sessionId);
   await refreshSessions();
 }
+
+// ── Sessions Refresh ──────────────────────────────────────────────────────────
 
 async function refreshSessions() {
   const { data } = await fetchJson('/api/sessions');
   cachedSessions = data.sessions || [];
   renderSessions(cachedSessions);
 }
+
+// ── Markdown Export ───────────────────────────────────────────────────────────
 
 function formatDateTime(ts) {
   const date = new Date(ts);
@@ -402,12 +570,8 @@ function buildSessionMarkdown(session, envelopes) {
   lines.push('');
   lines.push(`- Session ID: \`${session?.sessionId || activeSessionId || 'unknown'}\``);
   lines.push(`- Status: \`${session?.status || 'unknown'}\``);
-  if (session?.createdAt) {
-    lines.push(`- Created: ${formatDateTime(session.createdAt)}`);
-  }
-  if (session?.updatedAt) {
-    lines.push(`- Updated: ${formatDateTime(session.updatedAt)}`);
-  }
+  if (session?.createdAt) lines.push(`- Created: ${formatDateTime(session.createdAt)}`);
+  if (session?.updatedAt) lines.push(`- Updated: ${formatDateTime(session.updatedAt)}`);
   lines.push('');
 
   if (roundFinishedEvents.length > 0) {
@@ -426,14 +590,10 @@ function buildSessionMarkdown(session, envelopes) {
       lines.push('');
     }
   } else {
-    lines.push('## Debate Process');
-    lines.push('');
-    lines.push('_No completed round messages found in event log._');
-    lines.push('');
+    lines.push('## Debate Process\n\n_No completed round messages found._\n');
   }
 
-  lines.push('## Final Conclusion');
-  lines.push('');
+  lines.push('## Final Conclusion\n');
   if (synthesisEvent?.payload?.content) {
     lines.push(synthesisEvent.payload.content);
   } else if (cancelledEvent) {
@@ -444,14 +604,11 @@ function buildSessionMarkdown(session, envelopes) {
   lines.push('');
 
   if (errorEvents.length > 0 || cancelledEvent) {
-    lines.push('## Runtime Notes');
-    lines.push('');
+    lines.push('## Runtime Notes\n');
     for (const errorEvent of errorEvents) {
       lines.push(`- Error [${errorEvent.payload.code}]: ${errorEvent.payload.message}`);
     }
-    if (cancelledEvent) {
-      lines.push(`- Cancelled: ${cancelledEvent.payload.reason}`);
-    }
+    if (cancelledEvent) lines.push(`- Cancelled: ${cancelledEvent.payload.reason}`);
     lines.push('');
   }
 
@@ -470,11 +627,10 @@ function downloadTextFile(filename, content, mimeType = 'text/plain;charset=utf-
   URL.revokeObjectURL(url);
 }
 
+// ── Provider Select Options ───────────────────────────────────────────────────
+
 function buildProviderOptionLabel(provider) {
-  if (provider.available) {
-    return provider.label;
-  }
-  return `${provider.label} (unavailable)`;
+  return provider.available ? provider.label : `${provider.label} (unavailable)`;
 }
 
 function setSelectOptions(select, options, preferredValue) {
@@ -493,9 +649,7 @@ function setSelectOptions(select, options, preferredValue) {
       ? preferredValue
       : options.find((option) => !option.disabled)?.value;
 
-  if (finalValue) {
-    select.value = finalValue;
-  }
+  if (finalValue) select.value = finalValue;
 }
 
 async function refreshProviderOptions() {
@@ -520,18 +674,14 @@ async function refreshProviderOptions() {
 
   if (participantASelect.value === participantBSelect.value) {
     const fallback = availableProviders.find((option) => option.value !== participantASelect.value);
-    if (fallback) {
-      participantBSelect.value = fallback.value;
-    }
+    if (fallback) participantBSelect.value = fallback.value;
   }
 
   const judgeProviderNames = (data.judgeOptions || []).filter((value) => value !== 'both');
   const judgeProviderOptions = judgeProviderNames.length > 0
     ? judgeProviderNames.map((name) => {
       const matching = providerOptions.find((option) => option.value === name);
-      return matching
-        ? matching
-        : { value: name, label: name, disabled: false, title: '' };
+      return matching || { value: name, label: name, disabled: false, title: '' };
     })
     : providerOptions;
 
@@ -545,11 +695,11 @@ async function refreshProviderOptions() {
 
 function toInt(value, fallback) {
   const num = Number(value);
-  if (!Number.isFinite(num)) {
-    return fallback;
-  }
+  if (!Number.isFinite(num)) return fallback;
   return Math.trunc(num);
 }
+
+// ── Execute Debate ────────────────────────────────────────────────────────────
 
 async function executeRunDebate(payload) {
   const { ok, data } = await fetchJson('/api/execute', {
@@ -570,6 +720,8 @@ async function executeRunDebate(payload) {
   }
 }
 
+// ── Config State ──────────────────────────────────────────────────────────────
+
 function renderConfigState(state) {
   const active = state.active;
   const pending = state.pending;
@@ -581,12 +733,7 @@ function renderConfigState(state) {
       <h3>Active (v${active.version})</h3>
       <div class="config-grid">
         ${activeProviders.length === 0 ? '<div>No providers configured.</div>' : ''}
-        ${activeProviders
-          .map(
-            (provider) =>
-              `<div>${provider.id} · ${provider.type} · ${provider.model}</div>`
-          )
-          .join('')}
+        ${activeProviders.map((p) => `<div>${p.id} · ${p.type} · ${p.model}</div>`).join('')}
       </div>
     </div>
     <div class="config-panel">
@@ -596,12 +743,7 @@ function renderConfigState(state) {
         ${pending ? `<div>Schema: ${pending.schemaStatus}</div>` : ''}
         ${pending ? `<div>Connectivity: ${pending.connectivityStatus}</div>` : ''}
         ${pending?.validationMessage ? `<div>${pending.validationMessage}</div>` : ''}
-        ${pendingProviders
-          .map(
-            (provider) =>
-              `<div>${provider.id} · ${provider.type} · ${provider.model}</div>`
-          )
-          .join('')}
+        ${pendingProviders.map((p) => `<div>${p.id} · ${p.type} · ${p.model}</div>`).join('')}
       </div>
     </div>
   `;
@@ -611,6 +753,25 @@ async function refreshConfigState() {
   const { data } = await fetchJson('/api/config/state');
   renderConfigState(data);
   return data;
+}
+
+// ── Drawer Toggle ─────────────────────────────────────────────────────────────
+
+function toggleDrawer() {
+  isDrawerOpen = !isDrawerOpen;
+  if (isDrawerOpen) {
+    drawerContent.classList.remove('collapsed');
+    drawerChevron.textContent = '▼';
+  } else {
+    drawerContent.classList.add('collapsed');
+    drawerChevron.textContent = '▶';
+  }
+}
+
+// ── Event Listeners ───────────────────────────────────────────────────────────
+
+if (drawerToggle) {
+  drawerToggle.addEventListener('click', toggleDrawer);
 }
 
 refreshButton.addEventListener('click', async () => {
@@ -643,7 +804,11 @@ executeForm.addEventListener('submit', async (event) => {
     return;
   }
 
-  const rounds = toInt(formData.get('rounds'), 3);
+  currentParticipantA = participantA;
+  currentParticipantB = participantB;
+  totalRounds = toInt(formData.get('rounds'), 3);
+
+  const rounds = totalRounds;
   const timeoutSeconds = toInt(formData.get('timeoutSeconds'), 900);
   const judge = String(formData.get('judge') || 'claude');
   const executionCwd = String(formData.get('executionCwd') || '').trim();
@@ -679,27 +844,25 @@ stopSessionButton.addEventListener('click', async () => {
     return;
   }
   executeStatus.textContent = `Stopping ${activeSessionId}...`;
-  const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/stop`, {
-    method: 'POST',
-  });
+  const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/stop`, { method: 'POST' });
   if (!ok) {
     executeStatus.textContent = data.error || 'Failed to stop session.';
     return;
   }
   executeStatus.textContent = `Stop requested for ${activeSessionId}.`;
+  setConnState('idle');
   await refreshSessions();
 });
 
 stopTeamButton.addEventListener('click', async () => {
   executeStatus.textContent = 'Stopping all running sessions...';
-  const { ok, data } = await fetchJson('/api/sessions/stop', {
-    method: 'POST',
-  });
+  const { ok, data } = await fetchJson('/api/sessions/stop', { method: 'POST' });
   if (!ok) {
     executeStatus.textContent = data.error || 'Failed to stop all sessions.';
     return;
   }
   executeStatus.textContent = `Stop requested for ${data.stoppedSessions ?? 0} running session(s).`;
+  setConnState('idle');
   await refreshSessions();
 });
 
@@ -755,7 +918,7 @@ form.addEventListener('submit', async (event) => {
   renderConfigState(data);
 });
 
-// ── Tab navigation ──────────────────────────────────────────────────────────
+// ── Tab navigation ────────────────────────────────────────────────────────────
 
 function initTabs() {
   const tabButtons = document.querySelectorAll('.tab-btn');
@@ -764,22 +927,17 @@ function initTabs() {
   tabButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.getAttribute('data-tab');
-
       tabButtons.forEach((b) => b.classList.remove('active'));
       tabPanels.forEach((p) => p.classList.remove('active'));
-
       btn.classList.add('active');
       const panel = document.getElementById(`tab-${target}`);
       if (panel) panel.classList.add('active');
-
-      if (target === 'news') {
-        refreshSnapshots();
-      }
+      if (target === 'news') refreshSnapshots();
     });
   });
 }
 
-// ── News tab ─────────────────────────────────────────────────────────────────
+// ── News tab ──────────────────────────────────────────────────────────────────
 
 let selectedSnapshotId = null;
 
@@ -850,17 +1008,10 @@ async function refreshSnapshots() {
 
 function useSnapshot(snapId) {
   selectedSnapshotId = snapId;
-
-  // Update selected highlight
   document.querySelectorAll('.snapshot-item').forEach((item) => {
     item.classList.toggle('selected', item.getAttribute('data-snap-id') === snapId);
   });
-
-  // Propagate to debate form if the field exists
-  if (debateSnapshotInput) {
-    debateSnapshotInput.value = snapId;
-  }
-
+  if (debateSnapshotInput) debateSnapshotInput.value = snapId;
   newsCollectStatus.textContent = `선택됨: ${snapId} (Debate 탭의 Snapshot ID 필드에 반영되었습니다)`;
 }
 
@@ -900,10 +1051,7 @@ async function viewSnapshot(snapId) {
 async function deleteSnapshot(snapId) {
   if (!confirm(`스냅샷 "${snapId}"를 삭제하시겠습니까?`)) return;
 
-  const { ok, data } = await fetchJson(`/api/snapshots/${encodeURIComponent(snapId)}`, {
-    method: 'DELETE',
-  });
-
+  const { ok, data } = await fetchJson(`/api/snapshots/${encodeURIComponent(snapId)}`, { method: 'DELETE' });
   if (!ok) {
     newsCollectStatus.textContent = data.error || '삭제 실패.';
     return;
@@ -952,22 +1100,17 @@ newsCollectForm.addEventListener('submit', async (e) => {
   await refreshSnapshots();
 });
 
-modalClose.addEventListener('click', () => {
-  articleModal.style.display = 'none';
-});
-
+modalClose.addEventListener('click', () => { articleModal.style.display = 'none'; });
 articleModal.addEventListener('click', (e) => {
-  if (e.target === articleModal) {
-    articleModal.style.display = 'none';
-  }
+  if (e.target === articleModal) articleModal.style.display = 'none';
 });
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
   initTabs();
-  renderStream();
-  renderSynthesis();
+  renderBubbles();
+  renderTimeline();
   await refreshSessions();
   await refreshProviderOptions();
   await refreshConfigState();

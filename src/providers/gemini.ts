@@ -1,8 +1,8 @@
 import type { AIProvider, Message } from './types.js';
 import { runCommandStream } from './cli-runner.js';
 
-export class CodexProvider implements AIProvider {
-  readonly name = 'Codex';
+export class GeminiProvider implements AIProvider {
+  readonly name = 'Gemini';
   private command: string;
   private timeoutMs: number;
 

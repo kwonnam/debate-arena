@@ -5,35 +5,71 @@ import * as readline from 'node:readline';
 import { PromptApp } from './components/PromptApp.js';
 import type { PromptResult, PromptConfig } from './types.js';
 
+// Queue-based non-TTY reader: readline runs continuously and pushes results
+// into a queue. readNonTTY() pulls from the queue or waits for the next item.
+// This avoids the race condition where buffered lines are emitted between
+// listener removal and re-registration.
+const _nonTTYQueue: PromptResult[] = [];
+let _nonTTYWaiter: ((result: PromptResult) => void) | null = null;
+let _nonTTYDone = false;
+let _nonTTYInit = false;
+
+function parseLine(line: string): PromptResult {
+  const trimmed = line.trim();
+  if (trimmed === '') return { kind: 'empty' };
+  if (trimmed.startsWith('/')) {
+    const spaceIdx = trimmed.indexOf(' ', 1);
+    if (spaceIdx === -1) return { kind: 'slash', command: trimmed.slice(1), args: '' };
+    return {
+      kind: 'slash',
+      command: trimmed.slice(1, spaceIdx),
+      args: trimmed.slice(spaceIdx + 1).trim(),
+    };
+  }
+  return { kind: 'line', line: trimmed };
+}
+
+function initNonTTY(): void {
+  if (_nonTTYInit) return;
+  _nonTTYInit = true;
+
+  const rl = readline.createInterface({ input: stdin, crlfDelay: Infinity });
+
+  rl.on('line', (line: string) => {
+    const result = parseLine(line);
+    if (_nonTTYWaiter) {
+      const waiter = _nonTTYWaiter;
+      _nonTTYWaiter = null;
+      waiter(result);
+    } else {
+      _nonTTYQueue.push(result);
+    }
+  });
+
+  rl.once('close', () => {
+    _nonTTYDone = true;
+    if (_nonTTYWaiter) {
+      const waiter = _nonTTYWaiter;
+      _nonTTYWaiter = null;
+      waiter({ kind: 'eof' });
+    }
+  });
+}
+
 function readNonTTY(): Promise<PromptResult> {
   stdout.write('ffm > ');
+  initNonTTY();
+
   return new Promise<PromptResult>((resolve) => {
-    const rl = readline.createInterface({ input: stdin });
-
-    rl.once('line', (line: string) => {
-      rl.close();
-      const trimmed = line.trim();
-      if (trimmed === '') {
-        resolve({ kind: 'empty' });
-      } else if (trimmed.startsWith('/')) {
-        const spaceIdx = trimmed.indexOf(' ', 1);
-        if (spaceIdx === -1) {
-          resolve({ kind: 'slash', command: trimmed.slice(1), args: '' });
-        } else {
-          resolve({
-            kind: 'slash',
-            command: trimmed.slice(1, spaceIdx),
-            args: trimmed.slice(spaceIdx + 1).trim(),
-          });
-        }
-      } else {
-        resolve({ kind: 'line', line: trimmed });
-      }
-    });
-
-    rl.once('close', () => {
+    if (_nonTTYQueue.length > 0) {
+      resolve(_nonTTYQueue.shift()!);
+      return;
+    }
+    if (_nonTTYDone) {
       resolve({ kind: 'eof' });
-    });
+      return;
+    }
+    _nonTTYWaiter = resolve;
   });
 }
 

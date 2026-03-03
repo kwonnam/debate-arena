@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.release/
 .env
 *.tsbuildinfo
 
@@ -14,3 +15,5 @@ active
 collectProjectContext
 상태
 정책이
+/config.v2.json
+ffm-snapshots/

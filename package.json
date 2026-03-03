@@ -16,7 +16,8 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node dist/cli.js",
+    "start": "node dist/bin/cli.js",
+    "package:local": "npm run build && mkdir -p .release && npm pack --pack-destination .release",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

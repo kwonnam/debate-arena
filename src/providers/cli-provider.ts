@@ -1,12 +1,13 @@
 import type { AIProvider, Message } from './types.js';
 import { runCommandStream } from './cli-runner.js';
 
-export class CodexProvider implements AIProvider {
-  readonly name = 'Codex';
+export class CliProvider implements AIProvider {
+  readonly name: string;
   private command: string;
   private timeoutMs: number;
 
-  constructor(command: string, timeoutMs: number) {
+  constructor(name: string, command: string, timeoutMs: number) {
+    this.name = name;
     this.command = command;
     this.timeoutMs = timeoutMs;
   }

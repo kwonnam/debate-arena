@@ -11,8 +11,8 @@
     <header class="app-header">
       <div>
         <p class="eyebrow">fight-for-me</p>
-        <h1>Observability + Control Plane</h1>
-        <p class="subtitle">Monitor debates, replay sessions, and manage provider configs from a single cockpit.</p>
+        <h1>AI Battle Arena</h1>
+        <p class="subtitle">Watch AI models debate in real-time. Set up a question, sit back, and observe the intellectual battle.</p>
       </div>
       <div class="header-actions">
         <button class="button" id="refresh">Refresh</button>
@@ -25,167 +25,187 @@
       <button class="tab-btn" data-tab="news">📰 News</button>
     </nav>
 
+    <!-- Connection Status Bar -->
+    <div class="conn-status-bar" id="conn-status-bar">
+      <span class="conn-badge state-idle" id="conn-badge">⚪ Idle</span>
+      <div class="round-progress" id="round-progress" style="display:none">
+        <span id="round-label">Round 1 / 3</span>
+        <div class="round-bar"><div class="round-fill" id="round-fill"></div></div>
+      </div>
+      <div class="gap-banner" id="gap-banner" style="display:none">⚠️ Event gap detected — replaying from sequence 1...</div>
+      <div class="runtime-actions">
+        <button class="button subtle runtime-btn" type="button" id="stop-session">⛔ Stop</button>
+        <button class="button subtle runtime-btn" type="button" id="stop-team">⛔ Stop All</button>
+        <label class="runtime-label">
+          Replay from
+          <input type="number" id="replay-seq" min="1" placeholder="1" style="width:60px" />
+        </label>
+        <button class="button subtle runtime-btn" id="replay">↺ Replay</button>
+        <button class="button subtle runtime-btn" id="export-md">↓ Export</button>
+      </div>
+      <p class="form-status" id="execute-status"></p>
+    </div>
+
     <!-- Main (Debate) tab -->
     <div class="tab-panel active" id="tab-main">
-      <main class="grid">
-        <section class="card execute-card" style="--delay: 0.03s">
-          <div class="card-header">
-            <h2>Command Gateway</h2>
-            <p>Allowlisted execution (`run_debate`) + timeout/concurrency policy</p>
-          </div>
-          <form class="provider-form" id="execute-form">
-            <div class="field">
-              <label>Question</label>
-              <input name="question" placeholder="e.g. Should we adopt architecture X?" required />
-            </div>
-            <div class="inline-fields">
-              <div class="field">
-                <label>Rounds</label>
-                <input name="rounds" type="number" min="1" max="8" value="3" />
-              </div>
-              <div class="field">
-                <label>Timeout (seconds)</label>
-                <input name="timeoutSeconds" type="number" min="30" max="1800" value="900" />
-              </div>
-            </div>
-            <div class="field">
-              <label>Execution location (cwd)</label>
-              <input
-                name="executionCwd"
-                placeholder="/absolute/path or ./relative/path (default: current ffm cwd)"
-              />
-            </div>
-            <div class="field">
-              <label>Attach files / images (optional)</label>
-              <input name="questionFiles" type="file" multiple />
-              <small class="field-hint">Text files are embedded as text. Images are attached as data URL.</small>
-            </div>
-            <label class="toggle-field">
-              <input name="noContext" type="checkbox" />
-              <span>no-context (disable automatic project context)</span>
-            </label>
-            <div class="field">
-              <label>Snapshot ID (optional)</label>
-              <input name="snapshotId" id="debate-snapshot-id" placeholder="snap-xxxxx (from News tab)" />
-              <small class="field-hint">Attach a news snapshot to ground the debate with real articles.</small>
-            </div>
-            <div class="inline-fields">
-              <div class="field">
-                <label>Participant A</label>
-                <select name="participantA">
-                  <option value="codex">codex</option>
-                  <option value="claude">claude</option>
-                  <option value="gemini">gemini</option>
-                  <option value="ollama">ollama</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Participant B</label>
-                <select name="participantB">
-                  <option value="claude">claude</option>
-                  <option value="codex">codex</option>
-                  <option value="gemini">gemini</option>
-                  <option value="ollama">ollama</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Judge</label>
-                <select name="judge">
-                  <option value="claude">claude</option>
-                  <option value="codex">codex</option>
-                  <option value="gemini">gemini</option>
-                  <option value="ollama">ollama</option>
-                  <option value="both">both</option>
-                </select>
-              </div>
-            </div>
-            <div class="execute-actions">
-              <button class="button" type="submit">Run Debate</button>
-              <button class="button subtle" type="button" id="stop-session">Stop Selected Session</button>
-              <button class="button subtle" type="button" id="stop-team">Stop All Running Sessions</button>
-            </div>
-            <p class="form-status" id="execute-status"></p>
-          </form>
-        </section>
+      <div class="arena-layout">
 
-        <section class="card sessions-card" style="--delay: 0.05s">
-          <div class="card-header">
-            <h2>Sessions</h2>
-            <p>Active and recent debates</p>
-          </div>
-          <div class="session-actions">
-            <button class="button subtle" id="export-md">Export Selected as Markdown</button>
-          </div>
-          <div class="session-list" id="session-list"></div>
-        </section>
+        <!-- Left: Setup Drawer -->
+        <aside class="setup-drawer" id="setup-drawer">
+          <button class="drawer-toggle" id="drawer-toggle">⚙ Setup <span class="drawer-chevron" id="drawer-chevron">▼</span></button>
+          <div class="drawer-content" id="drawer-content">
 
-        <section class="card stream-card" style="--delay: 0.1s">
-          <div class="card-header">
-            <h2>Live Stream</h2>
-            <p>Streaming tokens and events</p>
-          </div>
-          <div class="stream-box" id="stream"></div>
-          <div class="stream-actions">
-            <label>
-              Replay from sequence
-              <input type="number" id="replay-seq" min="1" placeholder="1" />
-            </label>
-            <button class="button subtle" id="replay">Replay</button>
-          </div>
-        </section>
+            <!-- Sessions -->
+            <div class="drawer-section">
+              <h3 class="drawer-section-title">Sessions</h3>
+              <div class="session-list" id="session-list"></div>
+            </div>
 
-        <section class="card timeline-card" style="--delay: 0.15s">
-          <div class="card-header">
-            <h2>Timeline</h2>
-            <p>Round lifecycle + synthesis</p>
-          </div>
-          <div class="timeline" id="timeline"></div>
-        </section>
+            <!-- Execute Form -->
+            <div class="drawer-section">
+              <h3 class="drawer-section-title">New Debate</h3>
+              <form class="provider-form" id="execute-form">
+                <div class="field">
+                  <label>Question</label>
+                  <input name="question" placeholder="e.g. Should we adopt architecture X?" required />
+                </div>
+                <div class="inline-fields">
+                  <div class="field">
+                    <label>Rounds</label>
+                    <input name="rounds" type="number" min="1" max="8" value="3" />
+                  </div>
+                  <div class="field">
+                    <label>Timeout (s)</label>
+                    <input name="timeoutSeconds" type="number" min="30" max="1800" value="900" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Execution cwd</label>
+                  <input name="executionCwd" placeholder="/absolute/path or ./relative" />
+                </div>
+                <div class="field">
+                  <label>Attach files (optional)</label>
+                  <input name="questionFiles" type="file" multiple />
+                  <small class="field-hint">Text files embedded as text. Images as data URL.</small>
+                </div>
+                <label class="toggle-field">
+                  <input name="noContext" type="checkbox" />
+                  <span>no-context (disable automatic project context)</span>
+                </label>
+                <div class="field">
+                  <label>Snapshot ID (optional)</label>
+                  <input name="snapshotId" id="debate-snapshot-id" placeholder="snap-xxxxx (from News tab)" />
+                  <small class="field-hint">Attach a news snapshot to ground the debate with real articles.</small>
+                </div>
+                <div class="inline-fields">
+                  <div class="field">
+                    <label>Participant A</label>
+                    <select name="participantA">
+                      <option value="codex">codex</option>
+                      <option value="claude">claude</option>
+                      <option value="gemini">gemini</option>
+                      <option value="ollama">ollama</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Participant B</label>
+                    <select name="participantB">
+                      <option value="claude">claude</option>
+                      <option value="codex">codex</option>
+                      <option value="gemini">gemini</option>
+                      <option value="ollama">ollama</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Judge</label>
+                    <select name="judge">
+                      <option value="claude">claude</option>
+                      <option value="codex">codex</option>
+                      <option value="gemini">gemini</option>
+                      <option value="ollama">ollama</option>
+                      <option value="both">both</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="execute-actions">
+                  <button class="button" type="submit">▶ Run Debate</button>
+                </div>
+              </form>
+            </div>
 
-        <section class="card synthesis-card" style="--delay: 0.2s">
-          <div class="card-header">
-            <h2>Synthesis</h2>
-            <p>Final judgment and errors</p>
-          </div>
-          <div class="synthesis" id="synthesis"></div>
-        </section>
+            <!-- Control Plane -->
+            <div class="drawer-section">
+              <h3 class="drawer-section-title">Control Plane</h3>
+              <div class="config-state" id="config-state"></div>
+              <form class="provider-form" id="provider-form">
+                <div class="field">
+                  <label>Provider ID</label>
+                  <input name="id" placeholder="ollama-local" required />
+                </div>
+                <div class="field">
+                  <label>Type</label>
+                  <select name="type">
+                    <option value="ollama-compat">ollama-compat</option>
+                    <option value="anthropic">anthropic</option>
+                    <option value="cli">cli</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Base URL</label>
+                  <input name="baseUrl" placeholder="http://localhost:11434" />
+                </div>
+                <div class="field">
+                  <label>Model</label>
+                  <input name="model" placeholder="llama3" required />
+                </div>
+                <div class="field">
+                  <label>API Key (optional)</label>
+                  <input name="apiKey" placeholder="sk-..." type="password" />
+                </div>
+                <button class="button" type="submit">Register Pending</button>
+                <p class="form-status" id="form-status"></p>
+              </form>
+            </div>
 
-        <section class="card control control-card" style="--delay: 0.25s">
-          <div class="card-header">
-            <h2>Control Plane</h2>
-            <p>Active vs pending configuration</p>
           </div>
-          <div class="config-state" id="config-state"></div>
-          <form class="provider-form" id="provider-form">
-            <div class="field">
-              <label>Provider ID</label>
-              <input name="id" placeholder="ollama-local" required />
+        </aside>
+
+        <!-- Right: Arena Panel -->
+        <main class="arena-panel">
+
+          <!-- Bubble Stream -->
+          <section class="arena-section stream-section">
+            <div class="arena-section-header">
+              <h2>⚔️ Live Debate</h2>
             </div>
-            <div class="field">
-              <label>Type</label>
-              <select name="type">
-                <option value="ollama-compat">ollama-compat</option>
-                <option value="anthropic">anthropic</option>
-                <option value="cli">cli</option>
-              </select>
+            <div class="bubble-stream" id="stream">
+              <div class="stream-empty">Waiting for debate to start...</div>
             </div>
-            <div class="field">
-              <label>Base URL</label>
-              <input name="baseUrl" placeholder="http://localhost:11434" />
+            <div class="typing-indicator" id="typing-indicator" style="display:none">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
             </div>
-            <div class="field">
-              <label>Model</label>
-              <input name="model" placeholder="llama3" required />
+          </section>
+
+          <!-- Timeline (compact) -->
+          <section class="arena-section timeline-section">
+            <div class="arena-section-header">
+              <h2>Timeline</h2>
             </div>
-            <div class="field">
-              <label>API Key (optional)</label>
-              <input name="apiKey" placeholder="sk-..." type="password" />
+            <div class="timeline" id="timeline"></div>
+          </section>
+
+          <!-- Synthesis Hero (hidden until synthesis ready) -->
+          <section class="arena-section synthesis-section" id="synthesis-section" style="display:none">
+            <div class="synthesis-hero">
+              <div class="synthesis-hero-label">✨ Final Verdict</div>
+              <div class="synthesis-hero-content" id="synthesis"></div>
             </div>
-            <button class="button" type="submit">Register Pending</button>
-            <p class="form-status" id="form-status"></p>
-          </form>
-        </section>
-      </main>
+          </section>
+
+        </main>
+      </div>
     </div>
 
     <!-- News tab -->

@@ -15,9 +15,15 @@ export const KNOWN_CLAUDE_MODELS: readonly string[] = [
   'claude-haiku-4-5-20251001',
 ];
 
-const PROVIDERS: readonly string[] = ['codex', 'claude'];
+export const KNOWN_GEMINI_MODELS: readonly string[] = [
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+];
 
-type Provider = 'codex' | 'claude';
+const PROVIDERS: readonly string[] = ['codex', 'claude', 'gemini'];
+
+type Provider = 'codex' | 'claude' | 'gemini';
 
 export function getModelCompletions(input: string): readonly string[] {
   const trimmed = input.trimStart();
@@ -36,7 +42,9 @@ export function getModelCompletions(input: string): readonly string[] {
       ? KNOWN_CODEX_MODELS
       : provider === 'claude'
         ? KNOWN_CLAUDE_MODELS
-        : [];
+        : provider === 'gemini'
+          ? KNOWN_GEMINI_MODELS
+          : [];
 
   return ['default', ...models].filter((m) => m.startsWith(modelPrefix));
 }
@@ -50,17 +58,24 @@ function showCurrentModels(): void {
   console.log(
     `  ${chalk.cyan('Claude')}: ${config.claudeModel || chalk.dim('(default - CLI built-in)')}`,
   );
+  console.log(
+    `  ${chalk.cyan('Gemini')}: ${config.geminiModel || chalk.dim('(default - CLI built-in)')}`,
+  );
 
   console.log(chalk.bold('\n  Known Models:\n'));
   console.log(`  ${chalk.cyan('Codex')}:  ${KNOWN_CODEX_MODELS.join(', ')}`);
   console.log(`  ${chalk.cyan('Claude')}: ${KNOWN_CLAUDE_MODELS.join(', ')}`);
+  console.log(`  ${chalk.cyan('Gemini')}: ${KNOWN_GEMINI_MODELS.join(', ')}`);
 
-  console.log(chalk.dim('\n  Usage: /model <codex|claude> <model-name|default>\n'));
+  console.log(chalk.dim('\n  Usage: /model <codex|claude|gemini> <model-name|default>\n'));
 }
 
 function setModel(provider: Provider, modelName: string): void {
   const value = modelName === 'default' ? '' : modelName;
-  const configKey = provider === 'codex' ? 'codexModel' : 'claudeModel';
+  const configKey =
+    provider === 'codex' ? 'codexModel' :
+    provider === 'gemini' ? 'geminiModel' :
+    'claudeModel';
 
   saveConfig({ [configKey]: value });
 
@@ -80,14 +95,17 @@ export function handleModel(args: string): void {
     return;
   }
 
-  if (subcommand !== 'codex' && subcommand !== 'claude') {
+  if (subcommand !== 'codex' && subcommand !== 'claude' && subcommand !== 'gemini') {
     console.log(`\n  ${chalk.red('Unknown provider:')} ${subcommand}`);
-    console.log(chalk.dim('  Usage: /model <codex|claude> <model-name|default>\n'));
+    console.log(chalk.dim('  Usage: /model <codex|claude|gemini> <model-name|default>\n'));
     return;
   }
 
   if (!modelName) {
-    const known = subcommand === 'codex' ? KNOWN_CODEX_MODELS : KNOWN_CLAUDE_MODELS;
+    const known =
+      subcommand === 'codex' ? KNOWN_CODEX_MODELS :
+      subcommand === 'gemini' ? KNOWN_GEMINI_MODELS :
+      KNOWN_CLAUDE_MODELS;
     console.log(`\n  ${chalk.red('Model name required.')}`);
     console.log(`  Known ${subcommand} models: ${known.join(', ')}`);
     console.log(chalk.dim('  Usage: /model ' + subcommand + ' <model-name|default>\n'));
