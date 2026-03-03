@@ -231,19 +231,19 @@ da
 
   v0.5.2 Type /help for commands, /exit to quit.
 
-ffm >
+da >
 ```
 
 Inside the REPL, use slash commands:
 
 ```bash
-ffm > /status                          # Check which agents are available
-ffm > /rounds 2                        # Set 2 debate rounds
-ffm > /participants codex gemini       # Switch participants
-ffm > /join Should we use TypeScript?  # Start an interactive debate
-ffm > /plan Refactor the auth module   # Debate and apply code changes
-ffm > /help                            # Show all commands
-ffm > /exit                            # Quit
+da > /status                          # Check which agents are available
+da > /rounds 2                        # Set 2 debate rounds
+da > /participants codex gemini       # Switch participants
+da > /join Should we use TypeScript?  # Start an interactive debate
+da > /plan Refactor the auth module   # Debate and apply code changes
+da > /help                            # Show all commands
+da > /exit                            # Quit
 ```
 
 ---
@@ -305,7 +305,7 @@ The dashboard now supports:
 
 ```bash
 da
-ffm > /dashboard
+da > /dashboard
 ```
 
 Open the printed URL (default: `http://localhost:3847`).
@@ -367,10 +367,10 @@ da "Follow-up question" --news-snapshot ./ffm-snapshots/snap-abc123.json
 ### Collect news inside REPL
 
 ```bash
-ffm > /news federal reserve rate cut 2026
+da > /news federal reserve rate cut 2026
 # → fetches articles, saves snapshot, injects into next debate
 
-ffm > Federal Reserve가 금리를 내릴까?
+da > Federal Reserve가 금리를 내릴까?
 # → AIs debate using the collected articles as evidence
 ```
 
@@ -519,7 +519,7 @@ Notes:
   - `type: "cli"`
   - `command`: actual executable command
   - optional `model`: if omitted/empty/`default`, CLI default model is used
-  - if `model` is set (and command has no `--model`), ffm appends `--model <value>`
+  - if `model` is set (and command has no `--model`), da appends `--model <value>`
 - `ollama-compat` works with local Ollama **and** OpenAI-compatible cloud endpoints.
 - API key setting options:
   - `ollama_api_key` (or `ollamaApiKey`) for Ollama Cloud
@@ -583,7 +583,7 @@ npm run dev   # watches and rebuilds on change
    │
    ▼
 ┌──────┐     ┌───────────────────────────────────┐
-│ ffm  │────▶│         Debate Engine              │
+│  da  │────▶│         Debate Engine              │
 └──────┘     │                                     │
              │  ┌───────┐  Round N  ┌────────┐    │
              │  │ Codex │◄────────►│ Claude │    │

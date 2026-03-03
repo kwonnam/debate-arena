@@ -231,19 +231,19 @@ da
 
   v0.5.2 Type /help for commands, /exit to quit.
 
-ffm >
+da >
 ```
 
 REPL 안에서는 슬래시 명령어를 사용합니다:
 
 ```bash
-ffm > /status                                # 사용 가능한 에이전트 확인
-ffm > /rounds 2                              # 2라운드로 설정
-ffm > /participants codex gemini             # 참가자 변경
-ffm > /join TypeScript를 써야 할까?          # 인터랙티브 토론 시작
-ffm > /plan 인증 모듈을 리팩토링해줘         # 토론 후 코드 적용
-ffm > /help                                  # 전체 명령어 보기
-ffm > /exit                                  # 종료
+da > /status                                # 사용 가능한 에이전트 확인
+da > /rounds 2                              # 2라운드로 설정
+da > /participants codex gemini             # 참가자 변경
+da > /join TypeScript를 써야 할까?          # 인터랙티브 토론 시작
+da > /plan 인증 모듈을 리팩토링해줘         # 토론 후 코드 적용
+da > /help                                  # 전체 명령어 보기
+da > /exit                                  # 종료
 ```
 
 
@@ -318,10 +318,10 @@ da "후속 질문" --news-snapshot ./ffm-snapshots/snap-abc123.json
 ### REPL에서 뉴스 수집
 
 ```bash
-ffm > /news 연준 금리 인하 2026
+da > /news 연준 금리 인하 2026
 # → 기사 수집 → 스냅샷 저장 → 다음 토론에 주입
 
-ffm > 연준이 금리를 내릴까?
+da > 연준이 금리를 내릴까?
 # → 수집된 기사를 증거로 AI들이 토론
 ```
 
@@ -470,7 +470,7 @@ da config set defaultJudge both
   - `type: "cli"`
   - `command`: 실제 실행 명령어
   - `model`: 선택. 비우거나 `default`면 CLI 기본 모델 사용
-  - `model`을 지정했고 `command`에 `--model`이 없으면 ffm이 `--model <값>`을 자동 추가
+  - `model`을 지정했고 `command`에 `--model`이 없으면 da가 `--model <값>`을 자동 추가
 - `ollama-compat` 타입은 로컬 Ollama와 OpenAI 호환 클라우드 엔드포인트 둘 다 사용 가능합니다.
 - API 키 지정 방법:
   - Ollama Cloud용 `ollama_api_key` (또는 `ollamaApiKey`)
@@ -535,7 +535,7 @@ npm run dev   # 변경 감지 후 자동 재빌드
    │
    ▼
 ┌──────┐     ┌───────────────────────────────────┐
-│ ffm  │────▶│         토론 엔진                  │
+│  da  │────▶│         토론 엔진                  │
 └──────┘     │                                     │
              │  ┌───────┐  라운드 N ┌────────┐    │
              │  │ Codex │◄────────►│ Claude │    │
