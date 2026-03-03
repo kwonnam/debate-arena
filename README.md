@@ -1,14 +1,14 @@
-# fight-for-me
+# DEBATE ARENA
 
 **Let two AIs fight for the best answer — then turn the winner into code.**
 
-[한국어](./README.KR.md) | [npm](https://www.npmjs.com/package/fight-for-me) | [GitHub](https://github.com/Leekee0905/fight-for-me)
+[한국어](./README.KR.md) | [npm](https://www.npmjs.com/package/debate-arena) | [GitHub](https://github.com/kwonnam/debate-arena)
 
 ---
 
 ## Why AI Debate?
 
-A single AI gives you *one* perspective. But real engineering decisions need trade-offs, counter-arguments, and stress-testing. **fight-for-me** pits Codex (OpenAI) against Claude (Anthropic) in a structured, multi-round debate — so you get battle-tested answers, not just auto-complete.
+A single AI gives you *one* perspective. But real engineering decisions need trade-offs, counter-arguments, and stress-testing. **DEBATE ARENA** pits Codex (OpenAI) against Claude (Anthropic) in a structured, multi-round debate — so you get battle-tested answers, not just auto-complete.
 
 > One AI is an opinion. Two AIs debating is due diligence.
 
@@ -21,7 +21,7 @@ A single AI gives you *one* perspective. But real engineering decisions need tra
 Two AI agents argue your question from opposing sides across multiple rounds, then a judge synthesizes the best answer.
 
 ```bash
-ffm "Should we use REST or GraphQL for our new API?"
+da "Should we use REST or GraphQL for our new API?"
 ```
 
 ```
@@ -48,7 +48,7 @@ ffm "Should we use REST or GraphQL for our new API?"
 Jump into the debate as a third participant. Steer the conversation, challenge assumptions, or provide domain context that only you know.
 
 ```bash
-ffm "Best state management for React?" -i
+da "Best state management for React?" -i
 ```
 
 ```
@@ -72,7 +72,7 @@ ffm "Best state management for React?" -i
 The agents debate *how* to change your code, then you apply the consensus directly to your codebase. From discussion to implementation in one flow.
 
 ```bash
-ffm "How should we refactor the auth module?" --plan
+da "How should we refactor the auth module?" --plan
 ```
 
 ```
@@ -96,7 +96,7 @@ ffm "How should we refactor the auth module?" --plan
 
 ### Prerequisites
 
-fight-for-me shells out to AI CLI tools. You need at least two of the following:
+DEBATE ARENA shells out to AI CLI tools. You need at least two of the following:
 
 #### 1. Node.js >= 18
 
@@ -148,23 +148,23 @@ gemini --version
 
 ---
 
-### Install fight-for-me
+### Install debate-arena
 
 #### Option A: Install from npm (recommended)
 
 ```bash
-npm install -g fight-for-me
+npm install -g debate-arena
 
 # Verify
-ffm --version
+da --version
 ```
 
 #### Option B: Run from source
 
 ```bash
 # Clone the repository
-git clone https://github.com/Leekee0905/fight-for-me.git
-cd fight-for-me
+git clone https://github.com/kwonnam/debate-arena.git
+cd debate-arena
 
 # Install dependencies
 npm install
@@ -175,9 +175,9 @@ npm run build
 # Run directly
 node dist/bin/cli.js
 
-# Or link globally so ffm command is available
+# Or link globally so da command is available
 npm link
-ffm
+da
 ```
 
 #### Option C: Build a local package and move it to another environment
@@ -187,7 +187,7 @@ ffm
 npm run package:local
 
 # Copy the generated .tgz file to another machine, then install it there
-npm install -g ./fight-for-me-*.tgz
+npm install -g ./debate-arena-*.tgz
 ```
 
 ---
@@ -196,29 +196,29 @@ npm install -g ./fight-for-me-*.tgz
 
 ```bash
 # Start a debate (one-shot)
-ffm "Your question here"
+da "Your question here"
 
 # 5-round debate
-ffm "Compare ORMs for Node.js" -r 5
+da "Compare ORMs for Node.js" -r 5
 
 # Join as a participant
-ffm "Microservices vs monolith?" -i
+da "Microservices vs monolith?" -i
 
 # Debate and apply code changes
-ffm "Refactor this module" --plan
+da "Refactor this module" --plan
 
 # Include files as context
-ffm "How to improve this code?" --files src/index.ts src/utils.ts
+da "How to improve this code?" --files src/index.ts src/utils.ts
 ```
 
 ---
 
 ### Interactive REPL
 
-Running `ffm` without arguments launches the interactive REPL:
+Running `da` without arguments launches the interactive REPL:
 
 ```bash
-ffm
+da
 ```
 
 ```
@@ -304,7 +304,7 @@ The dashboard now supports:
 ### Run the dashboard
 
 ```bash
-ffm
+da
 ffm > /dashboard
 ```
 
@@ -337,11 +337,11 @@ export OLLAMA_MODEL="llava"
 - **Stop Selected Session** (dashboard button): cancels only the selected session
 - **Stop All Running Sessions** (dashboard button): cancels every running dashboard session
 - **`/stop team`** (REPL): stops all local dashboard sessions and the local dashboard server in current process
-- **`/stop`** (REPL): performs team stop first, then stops other running fight-for-me processes (legacy process scan behavior)
+- **`/stop`** (REPL): performs team stop first, then stops other running debate-arena processes (legacy process scan behavior)
 
 ## News Evidence
 
-fight-for-me can collect real-time news articles and inject them as evidence into the debate, so the AIs argue based on actual recent information.
+DEBATE ARENA can collect real-time news articles and inject them as evidence into the debate, so the AIs argue based on actual recent information.
 
 ### Supported news providers
 
@@ -355,13 +355,13 @@ fight-for-me can collect real-time news articles and inject them as evidence int
 
 ```bash
 # One-shot: collect news then debate
-ffm "Will the Fed cut rates this year?" --news
+da "Will the Fed cut rates this year?" --news
 
 # Suppress article listing (quiet mode)
-ffm "Impact of AI on jobs" --news --news-quiet
+da "Impact of AI on jobs" --news --news-quiet
 
 # Reuse a previously saved snapshot
-ffm "Follow-up question" --news-snapshot ./ffm-snapshots/snap-abc123.json
+da "Follow-up question" --news-snapshot ./ffm-snapshots/snap-abc123.json
 ```
 
 ### Collect news inside REPL
@@ -411,7 +411,7 @@ export NEWS_API_KEY="..."    # only if newsapi is enabled
 
 ## Configuration
 
-Default settings can be changed via `ffm config` or by editing `~/.fight-for-me/config.json`:
+Default settings can be changed via `da config` or by editing `~/.debate-arena/config.json`:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -429,18 +429,18 @@ Default settings can be changed via `ffm config` or by editing `~/.fight-for-me/
 
 ```bash
 # View current config
-ffm config list
+da config list
 
 # Change a setting
-ffm config set defaultRounds 5
-ffm config set defaultJudge both
+da config set defaultRounds 5
+da config set defaultJudge both
 ```
 
 ### Advanced providers (`config.v2.json`)
 
 You can add multiple Ollama profiles and cloud models by editing:
 
-`~/.fight-for-me/config.v2.json`
+`~/.debate-arena/config.v2.json`
 
 For local testing, this is also supported in the **current working directory**:
 
@@ -530,7 +530,7 @@ Notes:
 - Load priority for v2 config:
   1. `FFM_CONFIG_V2` (if set)
   2. `./config.v2.json` (current directory)
-  3. `~/.fight-for-me/config.v2.json`
+  3. `~/.debate-arena/config.v2.json`
 - Dashboard provider dropdowns refresh automatically from this file.
 - Sample file: `config.v2.example.json`
 
@@ -556,7 +556,7 @@ echo $ANTHROPIC_API_KEY # for Claude (if needed)
 Increase the command timeout:
 
 ```bash
-ffm config set commandTimeoutMs 300000
+da config set commandTimeoutMs 300000
 ```
 
 ### Running from source — "Cannot find module"

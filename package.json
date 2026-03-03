@@ -1,10 +1,11 @@
 {
-  "name": "fight-for-me",
+  "name": "debate-arena",
   "version": "0.5.2",
   "description": "AI Debate CLI - Codex vs Claude multi-round debates via local CLIs",
   "type": "module",
   "bin": {
-    "fight-for-me": "./dist/bin/cli.js",
+    "debate-arena": "./dist/bin/cli.js",
+    "da": "./dist/bin/cli.js",
     "ffm": "./dist/bin/cli.js"
   },
   "files": [

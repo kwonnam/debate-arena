@@ -22,7 +22,7 @@ function findProcesses(): ProcessInfo[] {
 }
 
 function findProcessesWindows(): ProcessInfo[] {
-  const ps = `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*fight-for-me*' -and $_.CommandLine -notlike '*Get-CimInstance*' -and $_.CommandLine -notlike '*fight-for-me stop*' -and $_.CommandLine -notlike '*shell-snapshots*' } | Select-Object ProcessId, CommandLine | ConvertTo-Json`;
+  const ps = `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*debate-arena*' -and $_.CommandLine -notlike '*Get-CimInstance*' -and $_.CommandLine -notlike '*debate-arena stop*' -and $_.CommandLine -notlike '*shell-snapshots*' } | Select-Object ProcessId, CommandLine | ConvertTo-Json`;
   const raw = execSync(`powershell -NoProfile -Command "${ps}"`, {
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'ignore'],
@@ -53,10 +53,10 @@ function findProcessesUnix(): ProcessInfo[] {
     .split('\n')
     .filter(
       (line) =>
-        line.includes('fight-for-me') &&
+        line.includes('debate-arena') &&
         line.includes('node') &&
         !line.includes('grep') &&
-        !line.includes('fight-for-me stop'),
+        !line.includes('debate-arena stop'),
     )
     .map((line) => {
       const parts = line.trim().split(/\s+/);
@@ -90,7 +90,7 @@ function cleanupTempFiles(): number {
   try {
     const files = readdirSync(dir);
     for (const file of files) {
-      if (file.startsWith('fight-for-me-') && file.endsWith('.txt')) {
+      if (file.startsWith('debate-arena-') && file.endsWith('.txt')) {
         try {
           unlinkSync(join(dir, file));
           cleaned++;
@@ -138,7 +138,7 @@ export function handleStop(args: string): void {
     const processes = findProcesses();
 
     if (processes.length === 0 && localStop.stoppedSessions === 0 && !localStop.serverStopped) {
-      console.log(`\n  ${chalk.blue('Info')} No running fight-for-me processes found.\n`);
+      console.log(`\n  ${chalk.blue('Info')} No running debate-arena processes found.\n`);
       return;
     }
 

@@ -68,7 +68,7 @@ async function buildCommand(template: string, prompt: string): Promise<{
   let tempFilePath: string | null = null;
 
   if (usesPromptFilePlaceholder) {
-    tempFilePath = join(tmpdir(), `fight-for-me-${randomUUID()}.txt`);
+    tempFilePath = join(tmpdir(), `debate-arena-${randomUUID()}.txt`);
     writeFileSync(tempFilePath, prompt, 'utf8');
     command = command.replaceAll('{prompt_file}', `"${tempFilePath}"`);
   }

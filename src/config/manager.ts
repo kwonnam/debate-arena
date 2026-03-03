@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { AppConfig, ConfigV2, DEFAULT_CONFIG, ProviderConfig } from './defaults.js';
 
-const CONFIG_DIR = join(homedir(), '.fight-for-me');
+const CONFIG_DIR = join(homedir(), '.debate-arena');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 function ensureConfigDir(): void {
