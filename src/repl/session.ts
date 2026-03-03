@@ -1,4 +1,5 @@
-import type { JudgeOption, OutputFormat } from '../types/debate.js';
+import type { JudgeOption, OutputFormat, ProviderName, NewsMode } from '../types/debate.js';
+import type { EvidenceSnapshot } from '../news/snapshot.js';
 
 export interface SessionState {
   readonly rounds: number;
@@ -7,6 +8,11 @@ export interface SessionState {
   readonly stream: boolean;
   readonly files: readonly string[];
   readonly noContext: boolean;
+  readonly participants?: readonly [ProviderName, ProviderName];
+  readonly output?: string;
+  readonly snapshot?: EvidenceSnapshot;
+  readonly newsQuiet?: boolean;
+  readonly newsMode?: NewsMode;
 }
 
 export function createDefaultSession(overrides?: Partial<SessionState>): SessionState {

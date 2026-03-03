@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { resetTTYInputState } from '../tty-state.js';
+import { getDashboardRuntimeStatus, stopDashboardRuntime } from '../../server/index.js';
 
 interface ProcessInfo {
   readonly pid: number;
@@ -109,21 +110,58 @@ export function handleStop(args: string): void {
   try {
     resetTTYInputState();
 
+    const normalizedArgs = args.trim().toLowerCase();
+    const teamMode = normalizedArgs === 'team';
+
+    if (teamMode) {
+      const before = getDashboardRuntimeStatus();
+      const result = stopDashboardRuntime({ stopServer: true, reason: 'user_cancelled' });
+      const after = getDashboardRuntimeStatus();
+
+      console.log(`\n  ${chalk.green('OK')} Team stop complete.`);
+      console.log(`  Running sessions: ${before.runningSessionCount} -> ${after.runningSessionCount}`);
+      console.log(`  Dashboard server: ${before.serverRunning ? 'running' : 'stopped'} -> ${after.serverRunning ? 'running' : 'stopped'}`);
+      console.log(`  Cancelled sessions: ${result.stoppedSessions}`);
+      console.log('');
+      return;
+    }
+
     const force = args.includes('--force');
     const dryRun = args.includes('--dry-run');
 
+    const before = getDashboardRuntimeStatus();
+    const localStop = dryRun
+      ? { stoppedSessions: 0, serverStopped: false }
+      : stopDashboardRuntime({ stopServer: true, reason: 'user_cancelled' });
+    const after = getDashboardRuntimeStatus();
+
     const processes = findProcesses();
 
-    if (processes.length === 0) {
+    if (processes.length === 0 && localStop.stoppedSessions === 0 && !localStop.serverStopped) {
       console.log(`\n  ${chalk.blue('Info')} No running fight-for-me processes found.\n`);
       return;
     }
 
-    console.log(`\n  Found ${processes.length} process(es):\n`);
-    for (const p of processes) {
-      console.log(`  PID ${chalk.bold(String(p.pid))}  ${p.command}`);
+    if (before.serverRunning || before.runningSessionCount > 0) {
+      if (dryRun) {
+        console.log(`\n  ${chalk.yellow('dry-run')} - local dashboard runtime would be stopped.`);
+        console.log(`  sessions: ${before.runningSessionCount}, serverRunning: ${before.serverRunning}\n`);
+      } else {
+        console.log(`\n  ${chalk.green('OK')} Stopped local dashboard runtime.`);
+        console.log(`  Sessions cancelled: ${localStop.stoppedSessions}`);
+        console.log(`  Dashboard server stopped: ${localStop.serverStopped ? 'yes' : 'no'}\n`);
+      }
+    } else if (!dryRun && (after.serverRunning || after.runningSessionCount > 0)) {
+      console.log(`\n  ${chalk.yellow('Warn')} Local dashboard runtime is still active.\n`);
     }
-    console.log('');
+
+    if (processes.length > 0) {
+      console.log(`\n  Found ${processes.length} process(es):\n`);
+      for (const p of processes) {
+        console.log(`  PID ${chalk.bold(String(p.pid))}  ${p.command}`);
+      }
+      console.log('');
+    }
 
     if (dryRun) {
       console.log(`  ${chalk.yellow('dry-run')} - no processes were stopped.\n`);

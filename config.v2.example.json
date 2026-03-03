@@ -1,0 +1,141 @@
+{
+  "version": 2,
+  "providers": {
+    "codex": {
+      "type": "cli",
+      "command": "codex exec --skip-git-repo-check -",
+      "model": "default",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 128000
+      }
+    },
+    "claude": {
+      "type": "cli",
+      "command": "claude -p",
+      "model": "default",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 200000
+      }
+    },
+    "gemini": {
+      "type": "cli",
+      "command": "gemini -p {prompt}",
+      "model": "default",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 1000000
+      }
+    },
+    "ollama-local": {
+      "type": "ollama-compat",
+      "baseUrl": "http://127.0.0.1:11434",
+      "model": "llama3.2",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 131072
+      }
+    },
+    "ollama-vision": {
+      "type": "ollama-compat",
+      "baseUrl": "http://127.0.0.1:11434",
+      "model": "llava",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 131072
+      }
+    },
+    "ollama-cloud-qwen3-coder-next": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "qwen3-coder-next",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
+    "ollama-cloud-glm-5": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "glm-5:cloud",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
+    "ollama-cloud-minimax-m2-5": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "minimax-m2.5:cloud",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
+    "ollama-cloud-kimi-k2-5": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "kimi-k2.5:cloud",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
+    "ollama-cloud-gemini-3-flash-preview": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "gemini-3-flash-preview:latest",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
+    "ollama-cloud-qwen3-5-397b": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "qwen3.5:397b-cloud",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    }
+  },
+  "defaultProvider": "ollama-cloud-qwen3-coder-next",
+  "debate": {
+    "defaultRounds": 3,
+    "defaultJudge": "ollama-cloud-qwen3-coder-next",
+    "defaultFormat": "pretty",
+    "stream": true,
+    "commandTimeoutMs": 180000,
+    "applyTimeoutMs": 300000
+  },
+  "dashboard": {
+    "port": 3847,
+    "host": "127.0.0.1",
+    "corsOrigin": [
+      "http://localhost:3847"
+    ]
+  },
+  "news": {
+    "providers": {
+      "brave":   { "enabled": true },
+      "newsapi": { "enabled": false },
+      "rss": {
+        "enabled": false,
+        "feeds": [
+          "https://feeds.reuters.com/reuters/topNews",
+          "https://feeds.bbci.co.uk/news/rss.xml"
+        ]
+      }
+    },
+    "maxArticlesPerProvider": 10,
+    "deduplication": true
+  }
+}

@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { showBanner } from '../ui/banner.js';
-import { loadConfig } from '../config/manager.js';
+import { loadConfig, loadConfigV2 } from '../config/manager.js';
+import { DEFAULT_NEWS_CONFIG } from '../config/defaults.js';
 import { parseInput, type ParsedCommand } from './parser.js';
 import { createDefaultSession, type SessionState } from './session.js';
 import { getHandler, isDebateCommand, runDebateFromSlash } from './registry.js';
@@ -10,6 +11,8 @@ import { COMMAND_REGISTRY } from './command-meta.js';
 import { resetTTYInputState } from './tty-state.js';
 import type { CommandContext } from './registry.js';
 import type { DebateMode } from '../types/debate.js';
+import type { CliArgs } from './cli-args.js';
+import { collectEvidence } from '../news/index.js';
 
 declare const PKG_VERSION: string;
 
@@ -49,7 +52,7 @@ async function dispatchCommand(
   }
 }
 
-export async function startRepl(): Promise<void> {
+export async function startRepl(cliArgs?: CliArgs): Promise<void> {
   showBanner();
   console.log(chalk.dim(`  v${PKG_VERSION} Type /help for commands, /exit to quit.\n`));
 
@@ -59,7 +62,41 @@ export async function startRepl(): Promise<void> {
     judge: config.defaultJudge,
     format: config.defaultFormat,
     stream: config.stream,
+    newsQuiet: cliArgs?.newsQuiet,
+    newsMode: cliArgs?.newsMode,
   });
+
+  // --news 또는 --news-snapshot 플래그 처리
+  if (cliArgs?.news || cliArgs?.newsSnapshot) {
+    const query = cliArgs.question ?? '';
+    if (!query && !cliArgs.newsSnapshot) {
+      console.log(chalk.yellow('  --news 플래그 사용 시 검색어가 필요합니다.'));
+      console.log(chalk.dim('  예: ffm --news "Trump tariffs"\n'));
+    } else {
+      try {
+        console.log(`  ${chalk.cyan('📰')} 뉴스 수집 중...\n`);
+        const configV2 = loadConfigV2();
+        const newsConfig = configV2.news ?? DEFAULT_NEWS_CONFIG;
+        const snapshot = await collectEvidence(query, {
+          snapshotFile: cliArgs.newsSnapshot,
+          quiet: cliArgs.newsQuiet,
+        }, newsConfig);
+        if (!cliArgs.newsQuiet) {
+          console.log(`  수집된 기사 (${snapshot.articles.length}건):`);
+          snapshot.articles.forEach((a, i) => {
+            console.log(`  ${i + 1}. [${a.source}] ${a.title}`);
+          });
+          console.log('');
+        }
+        console.log(`  ${chalk.green('✓')} 스냅샷 로드됨 (ID: ${snapshot.id})\n`);
+        session = { ...session, snapshot };
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.log(chalk.red(`  뉴스 수집 실패: ${msg}\n`));
+        console.log(chalk.dim('  뉴스 없이 일반 토론으로 진행합니다.\n'));
+      }
+    }
+  }
 
   let debateMode: DebateMode = 'debate';
 

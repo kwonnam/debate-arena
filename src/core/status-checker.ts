@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { loadConfig, resolveCommands } from '../config/manager.js';
 
 export interface ProviderStatus {
-  provider: 'codex' | 'claude';
+  provider: 'codex' | 'claude' | 'gemini';
   displayName: string;
   cliInstalled: boolean;
   cliBinary: string;
@@ -39,7 +39,7 @@ function getCliVersion(binary: string): string {
 }
 
 function checkProviderStatus(
-  provider: 'codex' | 'claude',
+  provider: 'codex' | 'claude' | 'gemini',
   displayName: string,
   command: string,
 ): ProviderStatus {
@@ -58,10 +58,11 @@ function checkProviderStatus(
 
 export function checkAllProviders(): ProviderStatus[] {
   const config = loadConfig();
-  const { codexCommand, claudeCommand } = resolveCommands(config);
+  const { codexCommand, claudeCommand, geminiCommand } = resolveCommands(config);
 
   return [
     checkProviderStatus('codex', 'Codex (OpenAI)', codexCommand),
     checkProviderStatus('claude', 'Claude (Anthropic)', claudeCommand),
+    checkProviderStatus('gemini', 'Gemini (Google)', geminiCommand),
   ];
 }

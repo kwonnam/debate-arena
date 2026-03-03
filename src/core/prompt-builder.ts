@@ -3,7 +3,7 @@ import type { DebateMode, ParticipantName, ProviderName } from '../types/debate.
 // --- Interfaces ---
 
 export interface PromptBuilders {
-  systemPrompt: (provider: ProviderName, projectContext?: string) => string;
+  systemPrompt: (provider: ProviderName, projectContext?: string, participants?: ProviderName[]) => string;
   openingPrompt: (question: string) => string;
   rebuttalPrompt: (opponentProvider: ParticipantName, opponentResponse: string) => string;
 }
@@ -21,27 +21,38 @@ export type ApplyPromptBuilder = (
   isSecondPass?: boolean
 ) => string;
 
-const PROVIDER_LABELS: Record<ProviderName, string> = {
+const KNOWN_PROVIDER_LABELS: Record<string, string> = {
   codex: 'Codex',
   claude: 'Claude',
+  gemini: 'Gemini',
+  ollama: 'Ollama',
 };
 
-const PARTICIPANT_LABELS: Record<ParticipantName, string> = {
-  codex: 'Codex',
-  claude: 'Claude',
-  user: 'User',
-};
+function providerLabel(provider: ProviderName): string {
+  return KNOWN_PROVIDER_LABELS[provider] ?? provider;
+}
 
-function opponentOf(provider: ProviderName): ProviderName {
-  return provider === 'codex' ? 'claude' : 'codex';
+function participantLabel(provider: ParticipantName): string {
+  if (provider === 'user') return 'User';
+  return providerLabel(provider);
+}
+
+function opponentOf(provider: ProviderName, participants?: ProviderName[]): ProviderName {
+  if (participants) {
+    return participants.find(p => p !== provider) ?? 'claude';
+  }
+  if (provider === 'codex') return 'claude';
+  if (provider === 'claude') return 'codex';
+  return 'codex';
 }
 
 export function buildDebaterSystemPrompt(
   provider: ProviderName,
-  projectContext?: string
+  projectContext?: string,
+  participants?: ProviderName[]
 ): string {
-  const self = PROVIDER_LABELS[provider];
-  const opponent = PROVIDER_LABELS[opponentOf(provider)];
+  const self = providerLabel(provider);
+  const opponent = providerLabel(opponentOf(provider, participants));
 
   const lines = [
     `You are ${self}, participating in a structured debate with ${opponent}.`,
@@ -76,7 +87,7 @@ export function buildRebuttalPrompt(
   opponentProvider: ParticipantName,
   opponentResponse: string
 ): string {
-  const opponent = PARTICIPANT_LABELS[opponentProvider];
+  const opponent = participantLabel(opponentProvider);
   return [
     `${opponent} has responded with the following argument:`,
     '',
@@ -98,12 +109,14 @@ export function buildSynthesisPrompt(
   const transcript = debateLog
     .map(
       (entry) =>
-        `[Round ${entry.round} - ${PARTICIPANT_LABELS[entry.provider]}]\n${entry.content}`
+        `[Round ${entry.round} - ${participantLabel(entry.provider)}]\n${entry.content}`
     )
     .join('\n\n---\n\n');
 
   const hasUser = debateLog.some((e) => e.provider === 'user');
-  const participants = hasUser ? 'Codex, Claude, and the User' : 'Codex and Claude';
+  const debateProviders = [...new Set(debateLog.filter(e => e.provider !== 'user').map(e => e.provider))];
+  const providerLabels = debateProviders.map((p) => participantLabel(p as ParticipantName)).join(', ');
+  const participants = hasUser ? `${providerLabels}, and the User` : providerLabels;
 
   return [
     `You are a fair and balanced judge reviewing a debate between ${participants}.`,
@@ -123,14 +136,46 @@ export function buildSynthesisPrompt(
   ].join('\n');
 }
 
+import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
+
+export function buildSynthesisPromptWithEvidence(
+  question: string,
+  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>,
+  snapshot?: EvidenceSnapshot,
+): string {
+  if (!snapshot) {
+    return buildSynthesisPrompt(question, debateLog);
+  }
+
+  const evidenceSection = [
+    '',
+    '## 참고 증거 (Evidence Snapshot)',
+    `수집 시각: ${snapshot.collectedAt} | 검색어: "${snapshot.query}" | ID: ${snapshot.id}`,
+    '두 AI 모두 아래 동일한 기사를 참고했습니다.',
+    '',
+    ...snapshot.articles.map(
+      (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${a.summary}\n  URL: ${a.url}`
+    ),
+    '',
+    '## 합성 요구사항 (Evidence 모드)',
+    '1. **출처 인용 강제**: 각 주장마다 근거 기사를 "[출처명, 날짜]" 형식으로 명시하시오.',
+    '2. **시나리오 분리**: 단기(3개월), 중기(1년), 장기(3년+) 영향을 별도 섹션으로 구분하시오.',
+    '3. **확신도 표기**: 각 예측에 높음/중간/낮음과 근거를 명시하시오.',
+    '4. **반증 조건**: "X가 발생하면 이 분석은 달라진다"를 명시하시오.',
+  ].join('\n');
+
+  return buildSynthesisPrompt(question, debateLog) + evidenceSection;
+}
+
 // --- Plan Mode Prompts ---
 
 export function buildPlanSystemPrompt(
   provider: ProviderName,
-  projectContext?: string
+  projectContext?: string,
+  participants?: ProviderName[]
 ): string {
-  const self = PROVIDER_LABELS[provider];
-  const opponent = PROVIDER_LABELS[opponentOf(provider)];
+  const self = providerLabel(provider);
+  const opponent = providerLabel(opponentOf(provider, participants));
 
   const lines = [
     `You are ${self}, participating in an implementation planning discussion with ${opponent}.`,
@@ -173,7 +218,7 @@ export function buildPlanRebuttalPrompt(
   opponentProvider: ParticipantName,
   opponentResponse: string
 ): string {
-  const opponent = PARTICIPANT_LABELS[opponentProvider];
+  const opponent = participantLabel(opponentProvider);
   return [
     `${opponent} has proposed the following implementation plan:`,
     '',
@@ -196,12 +241,14 @@ export function buildPlanSynthesisPrompt(
   const transcript = debateLog
     .map(
       (entry) =>
-        `[Round ${entry.round} - ${PARTICIPANT_LABELS[entry.provider]}]\n${entry.content}`
+        `[Round ${entry.round} - ${participantLabel(entry.provider)}]\n${entry.content}`
     )
     .join('\n\n---\n\n');
 
   const hasUser = debateLog.some((e) => e.provider === 'user');
-  const participants = hasUser ? 'Codex, Claude, and the User' : 'Codex and Claude';
+  const debateProviders = [...new Set(debateLog.filter(e => e.provider !== 'user').map(e => e.provider))];
+  const providerLabels = debateProviders.map((p) => participantLabel(p as ParticipantName)).join(', ');
+  const participants = hasUser ? `${providerLabels}, and the User` : providerLabels;
 
   return [
     `You are a technical lead synthesizing an implementation plan from a discussion between ${participants}.`,
@@ -288,6 +335,47 @@ export function buildPlanApplyPrompt(
     '5. Do not introduce unrelated modifications.',
     '6. Respond in the same language as the original question.',
   ].join('\n');
+}
+
+export type RoundEvidenceMode = 'unified' | 'split-first' | 'split-second';
+
+export function buildRoundEvidenceSection(
+  mode: RoundEvidenceMode,
+  articles: NewsArticle[],
+): string {
+  if (articles.length === 0) return '';
+
+  let selected: NewsArticle[];
+  let label: string;
+
+  if (mode === 'unified') {
+    selected = articles;
+    label = '양측 공통 증거 (unified)';
+  } else {
+    const half = Math.ceil(articles.length / 2);
+    if (mode === 'split-first') {
+      selected = articles.slice(0, half);
+      label = '찬성 측 근거 (split)';
+    } else {
+      selected = articles.slice(half);
+      label = '반대 측 근거 (split)';
+    }
+  }
+
+  if (selected.length === 0) return '';
+
+  const lines = [
+    '',
+    `## 참고 뉴스 (${label})`,
+    '아래 기사를 근거로 활용하여 논증을 강화하십시오.',
+    '',
+    ...selected.map(
+      (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${a.summary}`
+    ),
+    '',
+  ];
+
+  return lines.join('\n');
 }
 
 // --- Mode Constants & Factories ---

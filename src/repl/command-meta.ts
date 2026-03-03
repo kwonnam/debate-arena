@@ -46,7 +46,7 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
   },
   {
     command: 'judge',
-    description: 'Set judge: codex, claude, both',
+    description: 'Set judge: <provider-id> or both',
     category: 'session',
     args: { kind: 'required', placeholder: '<provider>' },
   },
@@ -75,8 +75,26 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
     args: { kind: 'none' },
     aliases: ['nocontext'],
   },
+  {
+    command: 'participants',
+    description: 'Set debate participants by provider id: /participants <p1> <p2> or /participants reset',
+    category: 'session',
+    args: { kind: 'required', placeholder: '<p1> <p2> | reset' },
+  },
+  {
+    command: 'output',
+    description: 'Save debate to a markdown file: /output <path>  or /output reset',
+    category: 'session',
+    args: { kind: 'required', placeholder: '<path> | reset' },
+  },
 
   // Management
+  {
+    command: 'news',
+    description: 'Collect news articles as debate evidence: /news <query>',
+    category: 'management',
+    args: { kind: 'required', placeholder: '<query>' },
+  },
   {
     command: 'config',
     description: 'Manage persistent configuration',
@@ -87,7 +105,7 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
     command: 'model',
     description: 'Set agent model',
     category: 'management',
-    args: { kind: 'optional', placeholder: '<codex|claude> [model]' },
+    args: { kind: 'optional', placeholder: '<codex|claude|gemini> [model]' },
     getCompletions: getModelCompletions,
   },
   {
@@ -97,10 +115,16 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
     args: { kind: 'none' },
   },
   {
-    command: 'stop',
-    description: 'Stop running fight-for-me processes',
+    command: 'dashboard',
+    description: 'Start local dashboard server',
     category: 'management',
     args: { kind: 'none' },
+  },
+  {
+    command: 'stop',
+    description: 'Stop running processes or /stop team for local dashboard sessions',
+    category: 'management',
+    args: { kind: 'optional', placeholder: '[team|--dry-run|--force]' },
   },
   {
     command: 'help',

@@ -6,6 +6,8 @@ import { handleStatus } from './handlers/status.js';
 import { handleStop } from './handlers/stop.js';
 import { handleModel } from './handlers/model.js';
 import { handleDebate } from './handlers/debate.js';
+import { handleDashboard } from './handlers/dashboard.js';
+import { handleNews } from './handlers/news.js';
 import {
   handleRounds,
   handleJudge,
@@ -13,6 +15,8 @@ import {
   handleStream,
   handleFiles,
   handleNoContext,
+  handleParticipants,
+  handleOutput,
   type SessionUpdateResult,
 } from './handlers/session-settings.js';
 
@@ -56,6 +60,8 @@ handlers.set('config', wrapVoid((args) => handleConfig(args)));
 handlers.set('status', wrapVoid(() => handleStatus()));
 handlers.set('stop', wrapVoid((args) => handleStop(args)));
 handlers.set('model', wrapVoid((args) => handleModel(args)));
+handlers.set('dashboard', wrapVoid(() => handleDashboard()));
+handlers.set('news', async (args, ctx) => handleNews(args, ctx.session));
 
 handlers.set('rounds', (args, ctx) => applySessionUpdate(handleRounds(args, ctx.session), ctx));
 handlers.set('judge', (args, ctx) => applySessionUpdate(handleJudge(args, ctx.session), ctx));
@@ -64,6 +70,8 @@ handlers.set('stream', (_args, ctx) => applySessionUpdate(handleStream(ctx.sessi
 handlers.set('files', (args, ctx) => applySessionUpdate(handleFiles(args, ctx.session), ctx));
 handlers.set('context', (_args, ctx) => applySessionUpdate(handleNoContext(ctx.session), ctx));
 handlers.set('nocontext', (_args, ctx) => applySessionUpdate(handleNoContext(ctx.session), ctx));
+handlers.set('participants', (args, ctx) => applySessionUpdate(handleParticipants(args, ctx.session), ctx));
+handlers.set('output', (args, ctx) => applySessionUpdate(handleOutput(args, ctx.session), ctx));
 
 for (const cmd of Object.keys(DEBATE_SLASH_MODES)) {
   handlers.set(cmd, wrapVoid((args) => {

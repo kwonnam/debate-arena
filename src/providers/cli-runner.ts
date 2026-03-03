@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-import type { Message } from './types.js';
+import type { Message, MessageAttachment } from './types.js';
+import { ProviderTimeoutError } from './errors.js';
+
+const ABORT_GRACE_PERIOD_MS = 3000;
+const ATTACHMENT_PREVIEW_LIMIT = 1200;
 
 function renderMessages(messages: Message[]): string {
   const systemMsgs = messages.filter((m) => m.role === 'system');
@@ -19,13 +23,38 @@ function renderMessages(messages: Message[]): string {
 
   for (const msg of conversationMsgs) {
     if (msg.role === 'assistant') {
-      parts.push(`[Your previous response]\n${msg.content}`);
+      parts.push(`[Your previous response]\n${renderMessageWithAttachments(msg)}`);
     } else {
-      parts.push(msg.content);
+      parts.push(renderMessageWithAttachments(msg));
     }
   }
 
   return parts.join('\n\n');
+}
+
+function renderMessageWithAttachments(message: Message): string {
+  if (!message.attachments || message.attachments.length === 0) {
+    return message.content;
+  }
+
+  const attachmentText = message.attachments
+    .map(formatAttachmentPreview)
+    .join('\n\n');
+
+  return `${message.content}\n\n[Attached Inputs]\n${attachmentText}`;
+}
+
+function formatAttachmentPreview(attachment: MessageAttachment): string {
+  const name = attachment.name ?? 'attachment';
+  const mimeType = attachment.mimeType ?? (attachment.kind === 'image' ? 'image/unknown' : 'text/plain');
+
+  if (attachment.kind === 'image') {
+    return `- image: ${name} (${mimeType})`;
+  }
+
+  const preview = attachment.content.slice(0, ATTACHMENT_PREVIEW_LIMIT);
+  const suffix = attachment.content.length > ATTACHMENT_PREVIEW_LIMIT ? '\n... [truncated]' : '';
+  return `- file: ${name} (${mimeType})\n\`\`\`text\n${preview}${suffix}\n\`\`\``;
 }
 
 async function buildCommand(template: string, prompt: string): Promise<{
@@ -67,7 +96,9 @@ async function buildCommand(template: string, prompt: string): Promise<{
 export async function* runCommandStream(
   template: string,
   messages: Message[],
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal,
+  executionCwd?: string,
 ): AsyncIterable<string> {
   const prompt = renderMessages(messages);
   const { command, useStdin, cleanup } = await buildCommand(template, prompt);
@@ -75,6 +106,7 @@ export async function* runCommandStream(
   const child = spawn(command, {
     shell: true,
     stdio: 'pipe',
+    cwd: executionCwd,
     windowsHide: true,
     env: {
       ...process.env,
@@ -87,7 +119,9 @@ export async function* runCommandStream(
   let done = false;
   let exitCode: number | null = null;
   let timedOut = false;
+  let aborted = false;
   let stderr = '';
+  let forceKillTimer: NodeJS.Timeout | null = null;
 
   const notify = () => {
     if (resolver) {
@@ -96,10 +130,37 @@ export async function* runCommandStream(
     }
   };
 
+  const killGracefully = () => {
+    if (child.killed) return;
+    child.kill('SIGTERM');
+    if (!forceKillTimer) {
+      forceKillTimer = setTimeout(() => {
+        if (!done && !child.killed) {
+          child.kill('SIGKILL');
+        }
+      }, ABORT_GRACE_PERIOD_MS);
+      forceKillTimer.unref();
+    }
+  };
+
   const timer = setTimeout(() => {
     timedOut = true;
-    child.kill();
+    killGracefully();
   }, timeoutMs);
+
+  const abortListener = () => {
+    aborted = true;
+    killGracefully();
+    notify();
+  };
+
+  if (signal) {
+    if (signal.aborted) {
+      abortListener();
+    } else {
+      signal.addEventListener('abort', abortListener, { once: true });
+    }
+  }
 
   child.stdout.on('data', (chunk: Buffer | string) => {
     queue.push(chunk.toString());
@@ -112,6 +173,10 @@ export async function* runCommandStream(
 
   child.on('close', (code) => {
     clearTimeout(timer);
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = null;
+    }
     exitCode = code;
     done = true;
     notify();
@@ -119,6 +184,10 @@ export async function* runCommandStream(
 
   child.on('error', (error) => {
     clearTimeout(timer);
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = null;
+    }
     stderr += `\n${error.message}`;
     exitCode = 1;
     done = true;
@@ -144,11 +213,23 @@ export async function* runCommandStream(
       }
     }
   } finally {
+    clearTimeout(timer);
+    if (forceKillTimer) {
+      clearTimeout(forceKillTimer);
+      forceKillTimer = null;
+    }
+    if (signal) {
+      signal.removeEventListener('abort', abortListener);
+    }
     await cleanup();
   }
 
   if (timedOut) {
-    throw new Error(`Command timed out after ${timeoutMs}ms: ${template}`);
+    throw new ProviderTimeoutError(`Command timed out after ${timeoutMs}ms: ${template}`, timeoutMs);
+  }
+
+  if (aborted) {
+    throw new DOMException('Aborted', 'AbortError');
   }
 
   if (exitCode !== 0) {

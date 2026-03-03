@@ -7,7 +7,7 @@ export type ParsedCommand =
   | { kind: 'slash'; command: string; args: string }
   | { kind: 'empty' };
 
-const DEBATE_ALIASES: Record<string, ParsedCommand['kind'] extends 'debate' ? ParsedCommand['mode'] : never> = {
+const DEBATE_ALIASES: Record<string, Extract<ParsedCommand, { kind: 'debate' }>['mode']> = {
   '/plan': 'plan',
   '/join': 'interactive',
   '/i': 'interactive',

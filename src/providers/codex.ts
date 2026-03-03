@@ -19,7 +19,7 @@ export class CodexProvider implements AIProvider {
     return chunks.join('').trim();
   }
 
-  stream(messages: Message[]): AsyncIterable<string> {
-    return runCommandStream(this.command, messages, this.timeoutMs);
+  stream(messages: Message[], signal?: AbortSignal, cwd?: string): AsyncIterable<string> {
+    return runCommandStream(this.command, messages, this.timeoutMs, signal, cwd);
   }
 }
