@@ -1,12 +1,35 @@
 import type { DebateEvent, DebateEventEnvelope } from '../types/debate-events.js';
+import type { DebateParticipant } from '../types/roles.js';
+
+export interface SessionParticipantSummary {
+  id: DebateParticipant['id'];
+  label: DebateParticipant['label'];
+  provider: DebateParticipant['provider'];
+}
 
 // 세션 메타데이터
 export interface SessionMetadata {
   sessionId: string;
   question: string;
-  participants: [string, string];
+  participants: SessionParticipantSummary[];
   rounds: number;
   createdAt: number; // Unix ms
+  judge?: string;
+  mode?: 'debate' | 'plan';
+  workflowKind?: 'news' | 'project' | 'general';
+  executionCwd?: string;
+  evidence?: SessionEvidenceSummary;
+  ollamaModel?: string;
+}
+
+export interface SessionEvidenceSummary {
+  id: string;
+  query: string;
+  collectedAt: string;
+  articleCount: number;
+  sources: string[];
+  topDomains: string[];
+  excludedCount: number;
 }
 
 // 세션 상태 (상태 머신 상태)
@@ -33,9 +56,17 @@ export interface SessionSummary {
   sessionId: string;
   question: string;
   status: SessionStatus;
+  rounds: number;
   createdAt: number;
   updatedAt: number;
   eventCount: number;
+  participants: SessionParticipantSummary[];
+  judge?: string;
+  mode?: 'debate' | 'plan';
+  workflowKind?: 'news' | 'project' | 'general';
+  executionCwd?: string;
+  evidence?: SessionEvidenceSummary;
+  ollamaModel?: string;
 }
 
 // SessionStore 인터페이스
@@ -97,9 +128,17 @@ export class InMemorySessionStore implements SessionStore {
         sessionId: session.metadata.sessionId,
         question: session.metadata.question,
         status: session.status,
+        rounds: session.metadata.rounds,
         createdAt: session.metadata.createdAt,
         updatedAt: session.updatedAt,
         eventCount: session.events.length,
+        participants: session.metadata.participants,
+        judge: session.metadata.judge,
+        mode: session.metadata.mode,
+        workflowKind: session.metadata.workflowKind,
+        executionCwd: session.metadata.executionCwd,
+        evidence: session.metadata.evidence,
+        ollamaModel: session.metadata.ollamaModel,
       }))
       .sort((a, b) => b.createdAt - a.createdAt);
   }

@@ -1,10 +1,11 @@
 import type { EvidenceSnapshot } from '../news/snapshot.js';
+import type { DebateParticipant } from './roles.js';
 
 export type { EvidenceSnapshot };
 
 export type ProviderName = string;
 
-export type ParticipantName = ProviderName | 'user';
+export type ParticipantName = string | 'user';
 
 export type OutputFormat = 'pretty' | 'json' | 'markdown';
 
@@ -16,11 +17,26 @@ export type NewsMode = 'unified' | 'split';
 
 export type ApplyTarget = ProviderName | 'both';
 
+export type WorkflowKind = 'news' | 'project' | 'general';
+
 export interface DebateAttachment {
   name: string;
   kind: 'text' | 'image';
   mimeType: string;
   content: string;
+}
+
+export interface DebateRoundState {
+  round: number;
+  summary: string;
+  keyIssues: string[];
+  agreements: string[];
+  nextFocus: string[];
+  shouldSuggestStop: boolean;
+  stopReason?: string;
+  source: 'judge' | 'fallback';
+  transcriptFallbackUsed: boolean;
+  warning?: string;
 }
 
 export interface DebateOptions {
@@ -34,16 +50,20 @@ export interface DebateOptions {
   projectContext?: string;
   mode?: DebateMode;
   interactive?: boolean;
-  participants?: [ProviderName, ProviderName];
+  participants?: Array<ProviderName | DebateParticipant>;
   signal?: AbortSignal;
   executionCwd?: string;
   attachments?: DebateAttachment[];
   snapshot?: EvidenceSnapshot;
   newsMode?: NewsMode;
+  workflowKind?: WorkflowKind;
+  ollamaModel?: string;
 }
 
 export interface DebateMessage {
-  provider: ParticipantName;
+  participantId: string;
+  label: string;
+  provider: ProviderName | 'user';
   round: number;
   phase: 'opening' | 'rebuttal';
   content: string;
@@ -52,19 +72,20 @@ export interface DebateMessage {
 export interface DebateResult {
   question: string;
   messages: DebateMessage[];
+  roundStates: DebateRoundState[];
   synthesis: string | null;
   rounds: number;
 }
 
 export interface DebateCallbacks {
   onRoundStart(round: number, total: number): void;
-  onTurnStart(provider: ProviderName, phase: 'opening' | 'rebuttal'): void;
-  onToken(provider: ProviderName, token: string): void;
-  onTurnEnd(provider: ProviderName, content: string): void;
+  onTurnStart(participant: DebateParticipant, phase: 'opening' | 'rebuttal'): void;
+  onToken(participant: DebateParticipant, token: string): void;
+  onTurnEnd(participant: DebateParticipant, content: string): void;
   onSynthesisStart(): void;
   onSynthesisToken(token: string): void;
   onSynthesisEnd(content: string): void;
-  onRetry(provider: ProviderName, attempt: number, maxAttempts: number, error: Error): void;
+  onRetry(participant: DebateParticipant, attempt: number, maxAttempts: number, error: Error): void;
   onUserTurnStart?(): void;
   onUserTurnEnd?(content: string): void;
   onUserInput?(): Promise<string>;

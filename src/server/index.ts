@@ -10,15 +10,18 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { collectEvidence } from '../news/index.js';
 import type { EvidenceSnapshot } from '../news/snapshot.js';
-import type { DebateOptions, ProviderName } from '../types/debate.js';
+import { summarizeSnapshot } from '../news/snapshot.js';
+import type { DebateOptions, ProviderName, WorkflowKind } from '../types/debate.js';
 import type { DebateEventEnvelope } from '../types/debate-events.js';
+import type { DebateParticipant, DebateParticipantRole } from '../types/roles.js';
 import { DebateOrchestrator } from '../core/orchestrator.js';
+import { normalizeDebateParticipants } from '../core/participants.js';
 import { InMemorySessionStore, type SessionStore } from '../core/session-store.js';
 import { collectProjectContext } from '../core/project-context.js';
-import { createProviderMap, listProviderOptions } from '../providers/factory.js';
+import { createProviderMap, listProviderModels, listProviderOptions } from '../providers/factory.js';
 import { createSilentCallbacks } from '../ui/renderer.js';
 import { EventHub } from './event-hub.js';
-import { DEFAULT_DASHBOARD_CONFIG } from '../config/defaults.js';
+import { DEFAULT_DASHBOARD_CONFIG, DEFAULT_NEWS_CONFIG, type NewsConfig } from '../config/defaults.js';
 import {
   applyValidationResult,
   getConfigEvents,
@@ -27,6 +30,7 @@ import {
   registerPendingModel,
 } from '../config/state.js';
 import { OllamaCompatProvider } from '../providers/ollama-compat.js';
+import { getDefaultRoleConfigYaml, getRoleConfigTemplateDefaults, loadRoleConfig, saveRoleConfig } from '../roles/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,11 +50,13 @@ interface DebateExecutionInput {
   question?: string;
   rounds?: number;
   judge?: ProviderName | 'both';
-  participants?: [ProviderName, ProviderName];
+  participants?: DebateParticipantInput[];
   noContext?: boolean;
   executionCwd?: string;
   attachments?: DebateAttachmentInput[];
   snapshotId?: string;
+  workflowKind?: WorkflowKind;
+  ollamaModel?: string;
 }
 
 interface ExecuteRequestBody {
@@ -66,6 +72,21 @@ interface DebateAttachmentInput {
   kind?: AttachmentKind;
   mimeType?: string;
   content?: string;
+}
+
+interface DebateParticipantRoleInput {
+  roleId?: string;
+  roleLabel?: string;
+  focus?: string;
+  instructions?: string[];
+  requiredQuestions?: string[];
+}
+
+interface DebateParticipantInput {
+  id?: string;
+  provider?: string;
+  label?: string;
+  role?: DebateParticipantRoleInput;
 }
 
 const EXECUTION_ALLOWLIST = new Set<ExecuteCommand>(['run_debate']);
@@ -172,10 +193,11 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     question: string;
     rounds: number;
     judge: ProviderName | 'both';
-    participants?: [ProviderName, ProviderName];
+    participants?: DebateParticipant[];
     noContext: boolean;
     executionCwd?: string;
     attachments: ParsedAttachment[];
+    ollamaModel?: string;
   } | null => {
     const question = input.question?.trim();
     if (!question) {
@@ -192,6 +214,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     const noContext = Boolean(input.noContext);
     const executionCwd = typeof input.executionCwd === 'string' ? input.executionCwd.trim() : '';
     const attachments = parseAttachments(input.attachments);
+    const ollamaModel = typeof input.ollamaModel === 'string' ? input.ollamaModel.trim() : '';
 
     return {
       question,
@@ -201,6 +224,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       noContext,
       executionCwd: executionCwd || undefined,
       attachments,
+      ollamaModel: ollamaModel || undefined,
     };
   };
 
@@ -230,17 +254,6 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     }
     const executionCwd = executionCwdResult.cwd;
 
-    let providerMap: ReturnType<typeof createProviderMap>;
-    try {
-      providerMap = createProviderMap(parsed.participants, parsed.judge);
-    } catch (error) {
-      return {
-        ok: false,
-        status: 400,
-        error: error instanceof Error ? error.message : 'Provider configuration error',
-      };
-    }
-
     const projectContext = parsed.noContext
       ? undefined
       : await collectProjectContext({ cwd: executionCwd });
@@ -259,6 +272,33 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       } catch {
         // snapshot not found — proceed without it
       }
+    }
+
+    const workflowKind = input.workflowKind ?? (snapshot ? 'news' : 'general');
+    const providerWorkflowError = validateWorkflowProviders(workflowKind, parsed.participants, parsed.judge);
+    if (providerWorkflowError) {
+      return { ok: false, status: 400, error: providerWorkflowError };
+    }
+
+    if (workflowKind === 'news' && usesOllama(parsed.participants, parsed.judge) && !parsed.ollamaModel) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'News workflow requires an Ollama model when Ollama is selected.',
+      };
+    }
+
+    let providerMap: ReturnType<typeof createProviderMap>;
+    try {
+      providerMap = createProviderMap(parsed.participants, parsed.judge, {
+        ollamaModel: parsed.ollamaModel,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        status: 400,
+        error: error instanceof Error ? error.message : 'Provider configuration error',
+      };
     }
 
     const timeoutMs = normalizeTimeoutMs(timeoutMsRaw);
@@ -294,6 +334,8 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       projectContext,
       attachments: parsed.attachments,
       snapshot,
+      workflowKind,
+      ollamaModel: parsed.ollamaModel,
     };
 
     const orchestrator = new DebateOrchestrator(providerMap, sessionStore);
@@ -331,11 +373,10 @@ export function startDashboardServer(): { url: string; port: number; close: () =
         jsonFiles.map(async (file) => {
           const raw = await readFile(join(SNAPSHOT_DIR, file), 'utf-8');
           const snap = JSON.parse(raw) as EvidenceSnapshot;
+          const summary = summarizeSnapshot(snap);
           return {
-            id: snap.id,
-            query: snap.query,
-            articleCount: snap.articles.length,
-            createdAt: snap.collectedAt,
+            ...summary,
+            createdAt: summary.collectedAt,
           };
         }),
       );
@@ -375,13 +416,14 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     if (!query) {
       return c.json({ error: 'query is required' }, 400);
     }
+    const newsConfig = createNewsConfig(body.sources);
     try {
-      const snapshot = await collectEvidence(query, { snapshotDir: SNAPSHOT_DIR });
+      const snapshot = await collectEvidence(query, { snapshotDir: SNAPSHOT_DIR }, newsConfig);
+      const summary = summarizeSnapshot(snapshot);
       return c.json({
-        id: snapshot.id,
-        query: snapshot.query,
-        articleCount: snapshot.articles.length,
-        createdAt: snapshot.collectedAt,
+        ...summary,
+        snapshotId: summary.id,
+        createdAt: summary.collectedAt,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to collect evidence';
@@ -408,11 +450,88 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
   app.get('/api/sessions', (c: Context) => c.json({ sessions: sessionStore.list() }));
 
+  app.get('/api/roles', (c: Context) => {
+    try {
+      const loaded = loadRoleConfig();
+      return c.json({
+        path: loaded.path,
+        config: loaded.config,
+        defaults: getRoleConfigTemplateDefaults(loaded.config),
+        defaultRaw: getDefaultRoleConfigYaml(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '역할 설정을 불러오지 못했습니다.';
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.get('/api/roles/config', (c: Context) => {
+    try {
+      const loaded = loadRoleConfig();
+      return c.json({
+        path: loaded.path,
+        raw: loaded.raw,
+        config: loaded.config,
+        defaults: getRoleConfigTemplateDefaults(loaded.config),
+        defaultRaw: getDefaultRoleConfigYaml(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '역할 설정 YAML을 불러오지 못했습니다.';
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.put('/api/roles/config', async (c: Context) => {
+    let body: { raw?: string };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    if (typeof body.raw !== 'string' || !body.raw.trim()) {
+      return c.json({ error: 'raw YAML is required' }, 400);
+    }
+
+    try {
+      const saved = saveRoleConfig(body.raw);
+      return c.json({
+        ok: true,
+        path: saved.path,
+        raw: saved.raw,
+        config: saved.config,
+        defaults: getRoleConfigTemplateDefaults(saved.config),
+        defaultRaw: getDefaultRoleConfigYaml(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '역할 설정 YAML 저장에 실패했습니다.';
+      return c.json({ error: message }, 400);
+    }
+  });
+
   app.get('/api/providers', (c: Context) => {
     const options = listProviderOptions();
     return c.json({
       providers: options,
       judgeOptions: [...options.map((provider) => provider.name), 'both'],
+    });
+  });
+
+  app.get('/api/providers/:id/models', async (c: Context) => {
+    const providerId = c.req.param('id');
+
+    try {
+      const models = await listProviderModels(providerId);
+      return c.json({ providerId, models });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load provider models';
+      return c.json({ error: message }, 400);
+    }
+  });
+
+  app.get('/api/runtime', (c: Context) => {
+    return c.json({
+      cwd: process.cwd(),
     });
   });
 
@@ -576,6 +695,25 @@ export function startDashboardServer(): { url: string; port: number; close: () =
   };
 }
 
+function createNewsConfig(sources?: string[]): NewsConfig {
+  const selected = new Set((sources ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
+  if (selected.size === 0) {
+    return DEFAULT_NEWS_CONFIG;
+  }
+
+  return {
+    ...DEFAULT_NEWS_CONFIG,
+    providers: {
+      brave: { enabled: selected.has('brave') && DEFAULT_NEWS_CONFIG.providers.brave.enabled },
+      newsapi: { enabled: selected.has('newsapi') && DEFAULT_NEWS_CONFIG.providers.newsapi.enabled },
+      rss: {
+        ...DEFAULT_NEWS_CONFIG.providers.rss,
+        enabled: selected.has('rss') && DEFAULT_NEWS_CONFIG.providers.rss.enabled,
+      },
+    },
+  };
+}
+
 function getBaseUrl(port: number): string {
   return `http://localhost:${port}`;
 }
@@ -591,22 +729,78 @@ async function validateConnectivity(baseUrl: string, apiKey: string, requestId: 
   }
 }
 
-function parseParticipants(input: unknown): [ProviderName, ProviderName] | undefined {
+function parseParticipants(input: unknown): DebateParticipant[] | undefined {
   if (!Array.isArray(input)) {
     return undefined;
   }
-  if (input.length !== 2) {
+  if (input.length < 2 || input.length > 3) {
     return undefined;
   }
-  const first = normalizeProviderName(input[0]);
-  const second = normalizeProviderName(input[1]);
-  if (!first || !second || first === second) {
+
+  const parsed = input.map((entry, index) => parseParticipant(entry, index));
+  if (parsed.some((participant) => !participant)) {
     return undefined;
   }
-  if (!isValidProviderId(first) || !isValidProviderId(second)) {
+
+  const participants = normalizeDebateParticipants(parsed as DebateParticipant[]);
+  const uniqueIds = new Set(participants.map((participant) => participant.id));
+  if (uniqueIds.size !== participants.length) {
     return undefined;
   }
-  return [first as ProviderName, second as ProviderName];
+
+  return participants;
+}
+
+function parseParticipant(input: unknown, index: number): DebateParticipant | undefined {
+  if (!input || typeof input !== 'object') {
+    return undefined;
+  }
+
+  const value = input as DebateParticipantInput;
+  const provider = normalizeProviderName(value.provider);
+  const label = sanitizeParticipantText(value.label);
+  const role = parseParticipantRole(value.role);
+  const id = sanitizeParticipantId(value.id || role?.roleId || `${provider}-${index + 1}`);
+
+  if (!provider || !isValidProviderId(provider) || !label || !role || !id) {
+    return undefined;
+  }
+
+  return {
+    id,
+    provider: provider as ProviderName,
+    label,
+    role,
+  };
+}
+
+function parseParticipantRole(input: unknown): DebateParticipantRole | undefined {
+  if (!input || typeof input !== 'object') {
+    return undefined;
+  }
+
+  const value = input as DebateParticipantRoleInput;
+  const roleId = sanitizeParticipantId(value.roleId);
+  const roleLabel = sanitizeParticipantText(value.roleLabel);
+  const focus = sanitizeParticipantText(value.focus);
+  const instructions = Array.isArray(value.instructions)
+    ? value.instructions.map(sanitizeParticipantText).filter(Boolean)
+    : [];
+  const requiredQuestions = Array.isArray(value.requiredQuestions)
+    ? value.requiredQuestions.map(sanitizeParticipantText).filter(Boolean)
+    : [];
+
+  if (!roleId || !roleLabel || !focus) {
+    return undefined;
+  }
+
+  return {
+    roleId,
+    roleLabel,
+    focus,
+    instructions,
+    requiredQuestions,
+  };
 }
 
 function parseJudge(input: unknown): ProviderName | 'both' | undefined {
@@ -618,8 +812,48 @@ function parseJudge(input: unknown): ProviderName | 'both' | undefined {
   return undefined;
 }
 
+function usesOllama(
+  participants?: DebateParticipant[],
+  judge?: ProviderName | 'both',
+): boolean {
+  if (participants?.some((participant) => participant.provider === 'ollama')) {
+    return true;
+  }
+
+  return judge === 'ollama';
+}
+
+function validateWorkflowProviders(
+  workflowKind: WorkflowKind,
+  participants?: DebateParticipant[],
+  judge?: ProviderName | 'both',
+): string | null {
+  if (workflowKind !== 'project') {
+    return null;
+  }
+
+  if (usesOllama(participants, judge)) {
+    return 'Project workflow supports CLI providers only (codex, claude, gemini).';
+  }
+
+  return null;
+}
+
 function normalizeProviderName(input: unknown): string {
   return typeof input === 'string' ? input.trim().toLowerCase() : '';
+}
+
+function sanitizeParticipantText(input: unknown): string {
+  return typeof input === 'string' ? input.trim().slice(0, 120) : '';
+}
+
+function sanitizeParticipantId(input: unknown): string {
+  const value = typeof input === 'string' ? input.trim().toLowerCase() : '';
+  if (!value) return '';
+  return value
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63);
 }
 
 function isValidProviderId(input: string): boolean {

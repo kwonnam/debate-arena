@@ -3,8 +3,8 @@ import type {
   DebateCallbacks,
   DebateResult,
   ParticipantName,
-  ProviderName,
 } from '../types/debate.js';
+import type { DebateParticipant } from '../types/roles.js';
 import { endStream, writeToken } from './streamer.js';
 
 type Style = { color: typeof chalk; label: string };
@@ -56,6 +56,14 @@ function participantStyle(provider: ParticipantName): Style {
   return providerStyle(provider);
 }
 
+function debateParticipantStyle(participant: DebateParticipant): Style {
+  const base = providerStyle(participant.provider);
+  return {
+    color: base.color,
+    label: participant.label || base.label,
+  };
+}
+
 function ruleLine(): string {
   return '-'.repeat(50);
 }
@@ -74,42 +82,55 @@ export function renderUserTurnEnd(content: string): void {
 }
 
 export function createPrettyCallbacks(): DebateCallbacks {
+  let streamedTurn = false;
+  let streamedSynthesis = false;
+
   return {
     onRoundStart(round: number, total: number) {
       console.log(chalk.bold.yellow(`\n${ruleLine()}\n  Round ${round} of ${total}\n${ruleLine()}`));
     },
 
-    onTurnStart(provider: ProviderName, phase: 'opening' | 'rebuttal') {
-      const style = providerStyle(provider);
+    onTurnStart(participant: DebateParticipant, phase: 'opening' | 'rebuttal') {
+      const style = debateParticipantStyle(participant);
       const phaseLabel = phase === 'opening' ? 'Opening' : 'Rebuttal';
+      streamedTurn = false;
       console.log(style.color(`\n  ${style.label} - ${phaseLabel}\n`));
     },
 
-    onToken(provider: ProviderName, token: string) {
-      writeToken(providerStyle(provider).color(token));
+    onToken(participant: DebateParticipant, token: string) {
+      streamedTurn = true;
+      writeToken(debateParticipantStyle(participant).color(token));
     },
 
-    onTurnEnd() {
+    onTurnEnd(participant: DebateParticipant, content: string) {
+      if (!streamedTurn && content.trim()) {
+        console.log(debateParticipantStyle(participant).color(content));
+      }
       endStream();
       console.log('');
     },
 
     onSynthesisStart() {
+      streamedSynthesis = false;
       console.log(chalk.bold.yellow(`\n${ruleLine()}\n  Final Synthesis\n${ruleLine()}`));
       console.log(chalk.cyan('\n  Judge is synthesizing...\n'));
     },
 
     onSynthesisToken(token: string) {
+      streamedSynthesis = true;
       writeToken(chalk.white(token));
     },
 
-    onSynthesisEnd() {
+    onSynthesisEnd(content: string) {
+      if (!streamedSynthesis && content.trim()) {
+        console.log(chalk.white(content));
+      }
       endStream();
       console.log('');
     },
 
-    onRetry(provider: ProviderName, attempt: number, maxAttempts: number) {
-      const label = providerStyle(provider).label;
+    onRetry(participant: DebateParticipant, attempt: number, maxAttempts: number) {
+      const label = debateParticipantStyle(participant).label;
       console.log(chalk.yellow(`\n  ${label} failed. Retrying (${attempt}/${maxAttempts})...\n`));
     },
   };
@@ -136,9 +157,20 @@ export function buildMarkdownContent(result: DebateResult): string {
   let md = `# Debate: ${result.question}\n\n`;
 
   for (const msg of result.messages) {
-    const label = participantStyle(msg.provider).label;
+    const label = participantStyle(msg.label).label;
     const phase = msg.phase === 'opening' ? 'Opening' : 'Rebuttal';
     md += `## Round ${msg.round} - ${label} (${phase})\n\n${msg.content}\n\n---\n\n`;
+  }
+
+  for (const state of result.roundStates) {
+    md += `## Round ${state.round} State\n\n${state.summary}\n\n`;
+    if (state.keyIssues.length > 0) {
+      md += `Key issues:\n${state.keyIssues.map((item) => `- ${item}`).join('\n')}\n\n`;
+    }
+    if (state.transcriptFallbackUsed) {
+      md += `_Transcript fallback used._\n\n`;
+    }
+    md += '---\n\n';
   }
 
   if (result.synthesis) {

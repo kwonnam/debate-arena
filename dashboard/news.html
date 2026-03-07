@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>뉴스 기반 토론 워크벤치</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-workflow="news">
+    <div class="background-glow"></div>
+
+    <header class="app-header app-header-split">
+      <div class="hero-copy">
+        <p class="eyebrow">DEBATE ARENA / NEWS WORKBENCH</p>
+        <h1>뉴스 기반 토론 워크벤치</h1>
+        <p class="subtitle">
+          검색어로 근거를 수집하고, 선택한 스냅샷을 바탕으로 시장 변화와 제품 함의를 토론하는 전용 페이지입니다.
+        </p>
+      </div>
+      <div class="header-actions header-actions-column">
+        <nav class="page-switcher" aria-label="워크벤치 이동">
+          <a class="page-link" href="/">허브</a>
+          <a class="page-link" href="/project.html">프로젝트 개선</a>
+          <a class="page-link is-active" href="/news.html">뉴스 기반 토론</a>
+          <a class="page-link" href="/settings.html">설정</a>
+        </nav>
+        <div class="header-toolbar">
+          <button class="button subtle" id="refresh" type="button">새로고침</button>
+          <span class="status-pill" id="server-status">News page</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="workflow-banner workflow-banner-compact">
+      <div class="workflow-step is-active">
+        <span class="workflow-index">1</span>
+        <div>
+          <strong>근거 수집</strong>
+          <p>질문 또는 검색어를 기준으로 뉴스 스냅샷을 생성합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">2</span>
+        <div>
+          <strong>근거 팩 선택</strong>
+          <p>저장된 스냅샷을 재사용하거나 새로 생성해 토론에 연결합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">3</span>
+        <div>
+          <strong>영향도 토론</strong>
+          <p>시장, 규제, 사용자 행동에 대한 시사점을 라운드별로 압축합니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="conn-status-bar" id="conn-status-bar">
+      <span class="conn-badge state-idle" id="conn-badge">⚪ Idle</span>
+      <div class="round-progress" id="round-progress" style="display:none">
+        <span id="round-label">Round 1 / 3</span>
+        <div class="round-bar"><div class="round-fill" id="round-fill"></div></div>
+      </div>
+      <div class="gap-banner" id="gap-banner" style="display:none">⚠️ 이벤트 간극 감지, 1번부터 다시 재생합니다.</div>
+      <div class="runtime-actions">
+        <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
+        <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
+        <label class="runtime-label">
+          Replay from
+          <input type="number" id="replay-seq" min="1" placeholder="1" />
+        </label>
+        <button class="button subtle runtime-btn" id="replay" type="button">재생</button>
+        <button class="button subtle runtime-btn" id="export-md" type="button">마크다운 내보내기</button>
+      </div>
+      <p class="form-status" id="execute-status"></p>
+    </div>
+
+    <div class="workbench-layout">
+      <aside class="sidebar-column">
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge">News</span>
+            <div>
+              <h2>뉴스 기반 토론</h2>
+              <p>근거 수집과 토론 실행을 한 페이지에서 이어서 처리합니다.</p>
+            </div>
+          </div>
+
+          <form class="provider-form evidence-form" id="news-form">
+            <div class="field">
+              <label>뉴스 토론 질문</label>
+              <textarea
+                name="question"
+                rows="4"
+                placeholder="예: 이 뉴스 이슈가 우리 제품과 시장에 어떤 영향을 미칠지 토론해줘"
+              ></textarea>
+            </div>
+
+            <div class="template-row">
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="news"
+                data-template="이 뉴스 이슈가 우리 제품 전략과 사용자 행동에 어떤 영향을 줄지 토론해줘"
+              >
+                시장 영향
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="news"
+                data-template="이 규제 또는 정책 뉴스가 업계 구조와 서비스 운영에 어떤 변화를 만들지 토론해줘"
+              >
+                규제 변화
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="news"
+                data-template="이 뉴스가 경쟁 구도와 향후 투자 포인트에 어떤 신호를 주는지 토론해줘"
+              >
+                경쟁 구도
+              </button>
+            </div>
+
+            <div class="field">
+              <label>근거 탐색어</label>
+              <div class="news-query-row">
+                <input id="news-query" name="query" placeholder="예: AI regulation Europe 2026" />
+                <button class="button subtle" type="button" id="use-news-question">질문 복사</button>
+                <button class="button" type="button" id="news-collect-btn">근거 수집</button>
+              </div>
+              <small class="field-hint" id="news-collect-status">검색어를 입력한 뒤 근거 팩을 수집하세요.</small>
+            </div>
+
+            <div class="field">
+              <label>수집 소스</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" name="sources" value="newsapi" checked /> NewsAPI</label>
+                <label class="checkbox-label"><input type="checkbox" name="sources" value="rss" checked /> RSS</label>
+                <label class="checkbox-label"><input type="checkbox" name="sources" value="brave" /> Brave</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>실행 경로</label>
+              <input name="executionCwd" id="news-execution-cwd" placeholder="/absolute/path or ./relative" />
+              <small class="field-hint">필요하면 로컬 프로젝트 컨텍스트와 함께 뉴스 토론을 실행할 수 있습니다.</small>
+            </div>
+
+            <div class="field conditional-field collapsed" id="news-ollama-model-group">
+              <label>Ollama 모델</label>
+              <select id="news-ollama-model" name="ollamaModel" disabled>
+                <option value="">모델을 불러오는 중입니다...</option>
+              </select>
+              <small class="field-hint">
+                Ollama를 선택한 경우에만 적용됩니다.
+                <a href="https://ollama.com/search" target="_blank" rel="noopener noreferrer">Ollama Search</a>
+                의 <code>Cloud</code> 태그 모델도 현재 설정된 Ollama endpoint에서 노출되면 그대로 선택할 수 있습니다.
+              </small>
+            </div>
+
+            <input type="hidden" id="debate-snapshot-id" name="snapshotId" />
+
+            <button class="button subtle wide-button" type="button" id="news-advanced-toggle">고급 설정 보기</button>
+
+            <div class="advanced-fields collapsed" id="news-advanced-fields">
+              <div class="inline-fields">
+                <div class="field">
+                  <label>라운드 수</label>
+                  <input name="rounds" type="number" min="1" max="8" value="3" />
+                </div>
+                <div class="field">
+                  <label>Timeout (s)</label>
+                  <input name="timeoutSeconds" type="number" min="30" max="1800" value="900" />
+                </div>
+              </div>
+
+              <label class="toggle-field">
+                <input name="noContext" type="checkbox" />
+                <span>프로젝트 자동 컨텍스트를 끕니다</span>
+              </label>
+
+              <div class="field">
+                <label>토론 템플릿</label>
+                <select name="templateId" id="news-template-select"></select>
+                <div class="field-hint" id="news-template-description">역할 템플릿을 불러오는 중입니다.</div>
+              </div>
+
+              <div class="role-preset-grid" id="news-participant-config"></div>
+
+              <div class="field">
+                <label>Judge</label>
+                <select name="judge">
+                  <option value="claude">claude</option>
+                  <option value="codex">codex</option>
+                  <option value="gemini">gemini</option>
+                  <option value="ollama">ollama</option>
+                  <option value="both">both</option>
+                </select>
+                <small class="field-hint">참가자는 2~3명까지만 지원합니다. 같은 모델을 여러 역할에 반복 배치할 수 있습니다.</small>
+              </div>
+
+              <div class="execute-actions">
+                <a class="button subtle" href="/settings.html">역할 YAML 편집</a>
+              </div>
+            </div>
+
+            <div class="execute-actions">
+              <button class="button" type="submit">뉴스 토론 시작</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">선택</span>
+            <div>
+              <h2>선택된 근거 팩</h2>
+              <p>현재 토론에 연결된 스냅샷을 확인하고 바로 기사 목록을 열 수 있습니다.</p>
+            </div>
+          </div>
+          <div class="selected-evidence-card empty" id="selected-evidence"></div>
+          <div class="execute-actions">
+            <button class="button subtle" type="button" id="open-evidence-modal">기사 목록 열기</button>
+          </div>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">Library</span>
+            <div>
+              <h2>근거 팩 라이브러리</h2>
+              <p>수집해 둔 스냅샷을 다시 선택하거나 삭제할 수 있습니다.</p>
+            </div>
+          </div>
+          <div class="snapshot-list" id="snapshot-list"></div>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">현재</span>
+            <div>
+              <h2>세션 컨텍스트</h2>
+              <p>현재 선택한 뉴스 세션의 연결 근거와 실행 상태를 확인합니다.</p>
+            </div>
+          </div>
+          <div class="session-context" id="session-brief">
+            <div class="empty-state">
+              <strong>선택된 세션이 없습니다.</strong>
+              <p>뉴스 토론을 시작하거나, 아래 세션을 선택하세요.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">기록</span>
+            <div>
+              <h2>최근 뉴스 세션</h2>
+              <p>뉴스 토론 흐름에서 생성된 세션만 별도로 표시합니다.</p>
+            </div>
+          </div>
+          <div class="session-list" id="session-list"></div>
+        </section>
+      </aside>
+
+      <main class="main-column">
+        <section class="evidence-grid">
+          <article class="workbench-card">
+            <div class="section-heading">
+              <span class="step-badge">Round</span>
+              <div>
+                <h2>라운드 보드</h2>
+                <p>현재 라운드의 핵심 쟁점, 합의점, 다음 포커스를 요약하고 이전 라운드 요약도 다시 볼 수 있습니다.</p>
+              </div>
+            </div>
+            <div class="round-history" id="round-history" role="tablist" aria-label="뉴스 라운드 보드 선택"></div>
+            <div class="decision-board empty" id="decision-board">라운드가 끝나면 핵심 보드가 이곳에 표시됩니다.</div>
+            <div class="participant-lanes" id="participant-lanes"></div>
+          </article>
+
+          <article class="workbench-card">
+            <div class="section-heading">
+              <span class="step-badge muted">Evidence</span>
+              <div>
+                <h2>연결된 근거 팩</h2>
+                <p>현재 세션 또는 선택된 스냅샷의 source, date, domain을 압축해 보여줍니다.</p>
+              </div>
+            </div>
+            <div class="evidence-pack empty" id="evidence-pack"></div>
+          </article>
+        </section>
+
+        <section class="debate-grid">
+          <article class="workbench-card">
+            <div class="pane-header">
+              <div>
+                <h3>실시간 토론 스트림</h3>
+                <p>토큰 단위로 올라오는 발화를 한 화면에서 관찰합니다.</p>
+              </div>
+            </div>
+            <div class="bubble-stream" id="stream"></div>
+            <div class="typing-indicator" id="typing-indicator" style="display:none">
+              <span></span><span></span><span></span>
+            </div>
+          </article>
+
+          <article class="workbench-card">
+            <div class="pane-header">
+              <div>
+                <h3>타임라인</h3>
+                <p>라운드 시작, 완료, synthesis 이벤트를 시간순으로 확인합니다.</p>
+              </div>
+            </div>
+            <div class="timeline" id="timeline"></div>
+          </article>
+        </section>
+
+        <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
+          <span class="synthesis-hero-label">Synthesis</span>
+          <div id="synthesis"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-overlay" id="article-modal" style="display:none">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="modal-title">기사 목록</h3>
+          <button class="button subtle" type="button" id="modal-close">닫기</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

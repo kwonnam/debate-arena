@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSynthesisPrompt, buildSynthesisPromptWithEvidence, buildRoundEvidenceSection } from './prompt-builder.js';
 import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
+import type { DebateRoundState } from '../types/debate.js';
 
 describe('buildSynthesisPromptWithEvidence', () => {
   const mockSnapshot: EvidenceSnapshot = {
@@ -40,10 +41,28 @@ describe('buildSynthesisPromptWithEvidence', () => {
   });
 
   it('snapshot 없이는 기존 buildSynthesisPrompt와 동일하게 동작한다', () => {
-    const debateLog = [{ provider: 'claude' as const, round: 1, content: 'test' }];
+    const debateLog = [{ label: '백엔드 개발자' as const, round: 1, content: 'test' }];
     const withEvidence = buildSynthesisPromptWithEvidence('question', debateLog, undefined);
     const original = buildSynthesisPrompt('question', debateLog);
     expect(withEvidence).toBe(original);
+  });
+
+  it('round state가 있으면 synthesis prompt에 압축 상태를 포함한다', () => {
+    const debateLog = [{ label: '백엔드 개발자' as const, round: 1, content: 'test' }];
+    const roundStates: DebateRoundState[] = [{
+      round: 1,
+      summary: '요약',
+      keyIssues: ['쟁점 1'],
+      agreements: ['합의 1'],
+      nextFocus: ['다음 초점'],
+      shouldSuggestStop: false,
+      source: 'judge',
+      transcriptFallbackUsed: false,
+    }];
+
+    const prompt = buildSynthesisPrompt('question', debateLog, roundStates);
+    expect(prompt).toContain('Compressed Round States');
+    expect(prompt).toContain('쟁점 1');
   });
 });
 
@@ -88,5 +107,23 @@ describe('buildRoundEvidenceSection', () => {
   it('기사가 없으면 빈 문자열을 반환한다', () => {
     const result = buildRoundEvidenceSection('unified', []);
     expect(result).toBe('');
+  });
+
+  it('라운드 증거는 상위 일부 기사만 남기고 나머지는 생략 표시한다', () => {
+    const articles = Array.from({ length: 6 }, (_, index) => ({
+      title: `Article ${index + 1}`,
+      source: 'Reuters',
+      url: `https://example.com/${index + 1}`,
+      publishedAt: '2026-03-02',
+      summary: 'A'.repeat(220),
+      relevanceScore: 1 - index * 0.1,
+    }));
+
+    const result = buildRoundEvidenceSection('unified', articles);
+
+    expect(result).toContain('Article 1');
+    expect(result).toContain('Article 4');
+    expect(result).not.toContain('Article 5');
+    expect(result).toContain('추가 기사 2건');
   });
 });
