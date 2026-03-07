@@ -1,287 +1,108 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DEBATE ARENA Dashboard</title>
+    <title>DEBATE ARENA Workbench Hub</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="hub-page">
     <div class="background-glow"></div>
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">DEBATE ARENA</p>
-        <h1>AI Battle Arena</h1>
-        <p class="subtitle">Watch AI models debate in real-time. Set up a question, sit back, and observe the intellectual battle.</p>
+
+    <header class="app-header app-header-split">
+      <div class="hero-copy">
+        <p class="eyebrow">DEBATE ARENA / WORKBENCH HUB</p>
+        <h1>근거 기반 의사결정 워크벤치</h1>
+        <p class="subtitle">
+          로컬 프로젝트 개선과 뉴스 기반 토론을 같은 화면에서 섞지 않고, 두 개의 독립 워크벤치로 나눠 운영합니다.
+        </p>
       </div>
-      <div class="header-actions">
-        <button class="button" id="refresh">Refresh</button>
-        <span class="status-pill" id="server-status">Local server</span>
+      <div class="header-actions header-actions-column">
+        <nav class="page-switcher" aria-label="워크벤치 이동">
+          <a class="page-link is-active" href="/">허브</a>
+          <a class="page-link" href="/project.html">프로젝트 개선</a>
+          <a class="page-link" href="/news.html">뉴스 기반 토론</a>
+          <a class="page-link" href="/settings.html">설정</a>
+        </nav>
+        <span class="status-pill">Hub</span>
       </div>
     </header>
 
-    <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="main">⚔️ Debate</button>
-      <button class="tab-btn" data-tab="news">📰 News</button>
-    </nav>
-
-    <!-- Connection Status Bar -->
-    <div class="conn-status-bar" id="conn-status-bar">
-      <span class="conn-badge state-idle" id="conn-badge">⚪ Idle</span>
-      <div class="round-progress" id="round-progress" style="display:none">
-        <span id="round-label">Round 1 / 3</span>
-        <div class="round-bar"><div class="round-fill" id="round-fill"></div></div>
-      </div>
-      <div class="gap-banner" id="gap-banner" style="display:none">⚠️ Event gap detected — replaying from sequence 1...</div>
-      <div class="runtime-actions">
-        <button class="button subtle runtime-btn" type="button" id="stop-session">⛔ Stop</button>
-        <button class="button subtle runtime-btn" type="button" id="stop-team">⛔ Stop All</button>
-        <label class="runtime-label">
-          Replay from
-          <input type="number" id="replay-seq" min="1" placeholder="1" style="width:60px" />
-        </label>
-        <button class="button subtle runtime-btn" id="replay">↺ Replay</button>
-        <button class="button subtle runtime-btn" id="export-md">↓ Export</button>
-      </div>
-      <p class="form-status" id="execute-status"></p>
-    </div>
-
-    <!-- Main (Debate) tab -->
-    <div class="tab-panel active" id="tab-main">
-      <div class="arena-layout">
-
-        <!-- Left: Setup Drawer -->
-        <aside class="setup-drawer" id="setup-drawer">
-          <button class="drawer-toggle" id="drawer-toggle">⚙ Setup <span class="drawer-chevron" id="drawer-chevron">▼</span></button>
-          <div class="drawer-content" id="drawer-content">
-
-            <!-- Sessions -->
-            <div class="drawer-section">
-              <h3 class="drawer-section-title">Sessions</h3>
-              <div class="session-list" id="session-list"></div>
-            </div>
-
-            <!-- Execute Form -->
-            <div class="drawer-section">
-              <h3 class="drawer-section-title">New Debate</h3>
-              <form class="provider-form" id="execute-form">
-                <div class="field">
-                  <label>Question</label>
-                  <input name="question" placeholder="e.g. Should we adopt architecture X?" required />
-                </div>
-                <div class="inline-fields">
-                  <div class="field">
-                    <label>Rounds</label>
-                    <input name="rounds" type="number" min="1" max="8" value="3" />
-                  </div>
-                  <div class="field">
-                    <label>Timeout (s)</label>
-                    <input name="timeoutSeconds" type="number" min="30" max="1800" value="900" />
-                  </div>
-                </div>
-                <div class="field">
-                  <label>Execution cwd</label>
-                  <input name="executionCwd" placeholder="/absolute/path or ./relative" />
-                </div>
-                <div class="field">
-                  <label>Attach files (optional)</label>
-                  <input name="questionFiles" type="file" multiple />
-                  <small class="field-hint">Text files embedded as text. Images as data URL.</small>
-                </div>
-                <label class="toggle-field">
-                  <input name="noContext" type="checkbox" />
-                  <span>no-context (disable automatic project context)</span>
-                </label>
-                <div class="field">
-                  <label>Snapshot ID (optional)</label>
-                  <input name="snapshotId" id="debate-snapshot-id" placeholder="snap-xxxxx (from News tab)" />
-                  <small class="field-hint">Attach a news snapshot to ground the debate with real articles.</small>
-                </div>
-                <div class="inline-fields">
-                  <div class="field">
-                    <label>Participant A</label>
-                    <select name="participantA">
-                      <option value="codex">codex</option>
-                      <option value="claude">claude</option>
-                      <option value="gemini">gemini</option>
-                      <option value="ollama">ollama</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label>Participant B</label>
-                    <select name="participantB">
-                      <option value="claude">claude</option>
-                      <option value="codex">codex</option>
-                      <option value="gemini">gemini</option>
-                      <option value="ollama">ollama</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label>Judge</label>
-                    <select name="judge">
-                      <option value="claude">claude</option>
-                      <option value="codex">codex</option>
-                      <option value="gemini">gemini</option>
-                      <option value="ollama">ollama</option>
-                      <option value="both">both</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="execute-actions">
-                  <button class="button" type="submit">▶ Run Debate</button>
-                </div>
-              </form>
-            </div>
-
-            <!-- Control Plane -->
-            <div class="drawer-section">
-              <h3 class="drawer-section-title">Control Plane</h3>
-              <div class="config-state" id="config-state"></div>
-              <form class="provider-form" id="provider-form">
-                <div class="field">
-                  <label>Provider ID</label>
-                  <input name="id" placeholder="ollama-local" required />
-                </div>
-                <div class="field">
-                  <label>Type</label>
-                  <select name="type">
-                    <option value="ollama-compat">ollama-compat</option>
-                    <option value="anthropic">anthropic</option>
-                    <option value="cli">cli</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label>Base URL</label>
-                  <input name="baseUrl" placeholder="http://localhost:11434" />
-                </div>
-                <div class="field">
-                  <label>Model</label>
-                  <input name="model" placeholder="llama3" required />
-                </div>
-                <div class="field">
-                  <label>API Key (optional)</label>
-                  <input name="apiKey" placeholder="sk-..." type="password" />
-                </div>
-                <button class="button" type="submit">Register Pending</button>
-                <p class="form-status" id="form-status"></p>
-              </form>
-            </div>
-
-          </div>
-        </aside>
-
-        <!-- Right: Arena Panel -->
-        <main class="arena-panel">
-
-          <!-- Bubble Stream -->
-          <section class="arena-section stream-section">
-            <div class="arena-section-header">
-              <h2>⚔️ Live Debate</h2>
-            </div>
-            <div class="bubble-stream" id="stream">
-              <div class="stream-empty">Waiting for debate to start...</div>
-            </div>
-            <div class="typing-indicator" id="typing-indicator" style="display:none">
-              <span class="typing-dot"></span>
-              <span class="typing-dot"></span>
-              <span class="typing-dot"></span>
-            </div>
-          </section>
-
-          <!-- Timeline (compact) -->
-          <section class="arena-section timeline-section">
-            <div class="arena-section-header">
-              <h2>Timeline</h2>
-            </div>
-            <div class="timeline" id="timeline"></div>
-          </section>
-
-          <!-- Synthesis Hero (hidden until synthesis ready) -->
-          <section class="arena-section synthesis-section" id="synthesis-section" style="display:none">
-            <div class="synthesis-hero">
-              <div class="synthesis-hero-label">✨ Final Verdict</div>
-              <div class="synthesis-hero-content" id="synthesis"></div>
-            </div>
-          </section>
-
-        </main>
-      </div>
-    </div>
-
-    <!-- News tab -->
-    <div class="tab-panel" id="tab-news">
-      <main class="grid">
-
-        <!-- Collect section -->
-        <section class="card news-collect-card" style="--delay: 0.03s">
-          <div class="card-header">
-            <h2>🔍 뉴스 수집</h2>
-            <p>Query news sources and save a snapshot for debate grounding.</p>
-          </div>
-          <form class="provider-form" id="news-collect-form">
-            <div class="field">
-              <label>Query</label>
-              <div class="news-query-row">
-                <input name="query" id="news-query" placeholder="e.g. Trump tariffs 2025" required />
-                <button class="button" type="submit" id="news-collect-btn">수집</button>
-              </div>
-            </div>
-            <div class="inline-fields">
-              <div class="field">
-                <label>Mode</label>
-                <div class="radio-group">
-                  <label class="radio-label">
-                    <input type="radio" name="newsMode" value="unified" /> unified
-                  </label>
-                  <label class="radio-label">
-                    <input type="radio" name="newsMode" value="split" checked /> split
-                  </label>
-                </div>
-              </div>
-              <div class="field">
-                <label>Sources</label>
-                <div class="checkbox-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" name="sources" value="brave" checked /> Brave
-                  </label>
-                  <label class="checkbox-label">
-                    <input type="checkbox" name="sources" value="newsapi" checked /> NewsAPI
-                  </label>
-                  <label class="checkbox-label">
-                    <input type="checkbox" name="sources" value="rss" checked /> RSS
-                  </label>
-                </div>
-              </div>
-            </div>
-            <p class="form-status" id="news-collect-status"></p>
-          </form>
-        </section>
-
-        <!-- Snapshot library -->
-        <section class="card news-library-card" style="--delay: 0.06s">
-          <div class="card-header">
-            <h2>📚 스냅샷 라이브러리</h2>
-            <p>Saved news snapshots. Select one to attach to a debate.</p>
-          </div>
-          <div class="snapshot-list" id="snapshot-list">
-            <p class="session-meta">Loading...</p>
-          </div>
-        </section>
-
-      </main>
-    </div>
-
-    <!-- Article modal -->
-    <div class="modal-overlay" id="article-modal" style="display:none">
-      <div class="modal-box">
-        <div class="modal-header">
-          <h3 id="modal-title">Articles</h3>
-          <button class="button subtle modal-close" id="modal-close">✕ 닫기</button>
+    <section class="workflow-banner">
+      <div class="workflow-step is-active">
+        <span class="workflow-index">1</span>
+        <div>
+          <strong>프로젝트 개선 페이지</strong>
+          <p>로컬 작업공간과 첨부 파일을 바탕으로 UX, 구조, 기술 부채를 토론합니다.</p>
         </div>
-        <div class="modal-body" id="modal-body"></div>
       </div>
-    </div>
+      <div class="workflow-step">
+        <span class="workflow-index">2</span>
+        <div>
+          <strong>뉴스 기반 토론 페이지</strong>
+          <p>근거 팩을 수집하고 선택한 뒤 시장, 규제, 제품 영향도를 토론합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">3</span>
+        <div>
+          <strong>실시간 관찰</strong>
+          <p>각 페이지에서 라운드 보드, 스트림, 타임라인, synthesis를 따로 확인합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">4</span>
+        <div>
+          <strong>결론 채택</strong>
+          <p>프로젝트 개선안과 뉴스 시사점을 서로 다른 문맥으로 분리해 의사결정합니다.</p>
+        </div>
+      </div>
+    </section>
 
-    <script type="module" src="/app.js"></script>
+    <main class="home-grid">
+      <section class="workbench-card home-card">
+        <span class="step-badge">Local</span>
+        <h2>프로젝트 개선 아이디어</h2>
+        <p>
+          기존처럼 로컬 기반으로 프로젝트를 다듬는 워크벤치입니다. 현재 작업 디렉터리, 첨부 파일, 프로젝트 컨텍스트를
+          중심으로 개선안을 끌어냅니다.
+        </p>
+        <div class="home-chip-row">
+          <span class="meta-badge">UX 개선</span>
+          <span class="meta-badge">아키텍처 정리</span>
+          <span class="meta-badge">기술 부채 우선순위</span>
+        </div>
+        <a class="button" href="/project.html">프로젝트 페이지 열기</a>
+      </section>
+
+      <section class="workbench-card home-card">
+        <span class="step-badge">News</span>
+        <h2>뉴스 기반 토론</h2>
+        <p>
+          검색어로 근거 팩을 수집하고, 저장된 스냅샷을 다시 선택해 토론을 실행하는 워크벤치입니다. 제품 전략과 시장 변화
+          해석에 맞춰 구성했습니다.
+        </p>
+        <div class="home-chip-row">
+          <span class="meta-badge">근거 수집</span>
+          <span class="meta-badge">스냅샷 재사용</span>
+          <span class="meta-badge">시장 영향 분석</span>
+        </div>
+        <a class="button" href="/news.html">뉴스 페이지 열기</a>
+      </section>
+
+      <section class="workbench-card home-card">
+        <span class="step-badge">Config</span>
+        <h2>역할 템플릿 설정</h2>
+        <p>
+          뉴스와 프로젝트 워크플로우에 적용할 2~3인 역할 템플릿을 YAML로 편집하고, 기본 judge와 추천 모델 구성을 관리합니다.
+        </p>
+        <div class="home-chip-row">
+          <span class="meta-badge">YAML 편집</span>
+          <span class="meta-badge">2~3인 제한</span>
+          <span class="meta-badge">역할 프리셋</span>
+        </div>
+        <a class="button" href="/settings.html">설정 페이지 열기</a>
+      </section>
+    </main>
   </body>
 </html>

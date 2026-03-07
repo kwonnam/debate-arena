@@ -1,6 +1,8 @@
 import { loadConfig, loadConfigV2, resolveCommands } from '../config/manager.js';
 import type { ProviderConfig } from '../config/defaults.js';
 import type { ProviderName } from '../types/debate.js';
+import type { DebateParticipant } from '../types/roles.js';
+import type { ModelInfo } from './base-http-provider.js';
 import type { AIProvider } from './types.js';
 import { CliProvider } from './cli-provider.js';
 import { ClaudeProvider } from './claude.js';
@@ -26,6 +28,10 @@ interface ResolvedProviderEntry {
   model?: string;
   timeoutMs: number;
   source: 'v2' | 'legacy';
+}
+
+interface ProviderOverrides {
+  ollamaModel?: string;
 }
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
@@ -122,6 +128,25 @@ function resolveProviderEntries(): Map<ProviderName, ResolvedProviderEntry> {
     merged.set(id, entry);
   }
   return merged;
+}
+
+function applyProviderOverrides(
+  entry: ResolvedProviderEntry,
+  overrides?: ProviderOverrides,
+): ResolvedProviderEntry {
+  if (entry.id !== 'ollama') {
+    return entry;
+  }
+
+  const model = overrides?.ollamaModel?.trim();
+  if (!model) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    model,
+  };
 }
 
 function resolveApiKey(entry: ResolvedProviderEntry): string {
@@ -270,32 +295,35 @@ export function listProviderOptions(): ProviderOption[] {
 }
 
 export function createProviderMap(
-  participants?: readonly [ProviderName, ProviderName],
+  participants?: readonly (ProviderName | DebateParticipant)[],
   judge?: ProviderName | 'both',
+  overrides?: ProviderOverrides,
 ): Map<ProviderName, AIProvider> {
   const entries = resolveProviderEntries();
   const providers = new Map<ProviderName, AIProvider>();
   const errors = new Map<ProviderName, string>();
 
   for (const entry of entries.values()) {
-    const validationError = validateProviderEntry(entry);
+    const effectiveEntry = applyProviderOverrides(entry, overrides);
+    const validationError = validateProviderEntry(effectiveEntry);
     if (validationError) {
-      errors.set(entry.id, validationError);
+      errors.set(effectiveEntry.id, validationError);
       continue;
     }
 
     try {
-      providers.set(entry.id, instantiateProvider(entry));
+      providers.set(effectiveEntry.id, instantiateProvider(effectiveEntry));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      errors.set(entry.id, message);
+      errors.set(effectiveEntry.id, message);
     }
   }
 
   const required = new Set<ProviderName>();
-  if (participants) {
-    required.add(normalizeRequestedProvider(participants[0]));
-    required.add(normalizeRequestedProvider(participants[1]));
+  if (participants && participants.length > 0) {
+    for (const participant of participants) {
+      required.add(normalizeRequestedProvider(typeof participant === 'string' ? participant : participant.provider));
+    }
   } else {
     required.add('codex');
     required.add('claude');
@@ -348,4 +376,30 @@ export function createApplyProvider(providerName: ProviderName): AIProvider {
   }
 
   return new CliProvider(providerId, command, commands.applyTimeoutMs);
+}
+
+export async function listProviderModels(providerName: ProviderName): Promise<ModelInfo[]> {
+  const providerId = normalizeProviderId(providerName);
+  const entry = resolveProviderEntries().get(providerId);
+
+  if (!entry) {
+    throw new Error(`Provider '${providerName}' is not configured`);
+  }
+
+  if (entry.type !== 'ollama-compat') {
+    throw new Error(`Provider '${providerName}' does not support remote model listing`);
+  }
+
+  const validationError = validateProviderEntry(entry);
+  if (validationError) {
+    throw new Error(`Provider '${providerName}' is unavailable (${validationError})`);
+  }
+
+  const provider = instantiateProvider(entry);
+  if (!(provider instanceof OllamaCompatProvider)) {
+    throw new Error(`Provider '${providerName}' does not expose model listing`);
+  }
+
+  const models = await provider.listModels();
+  return models.sort((left, right) => left.id.localeCompare(right.id));
 }

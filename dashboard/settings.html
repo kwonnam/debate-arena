@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>토론 역할 설정</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-workflow="settings" class="settings-page">
+    <div class="background-glow"></div>
+
+    <header class="app-header app-header-split">
+      <div class="hero-copy">
+        <p class="eyebrow">DEBATE ARENA / SETTINGS</p>
+        <h1>토론 역할 템플릿 설정</h1>
+        <p class="subtitle">
+          뉴스 토론과 프로젝트 개선 토론에 사용할 2~3인 역할 템플릿을 YAML로 관리하고, 저장 전에 바로 미리볼 수 있습니다.
+        </p>
+      </div>
+      <div class="header-actions header-actions-column">
+        <nav class="page-switcher" aria-label="워크벤치 이동">
+          <a class="page-link" href="/">허브</a>
+          <a class="page-link" href="/project.html">프로젝트 개선</a>
+          <a class="page-link" href="/news.html">뉴스 기반 토론</a>
+          <a class="page-link is-active" href="/settings.html">설정</a>
+        </nav>
+        <div class="header-toolbar">
+          <span class="status-pill" id="role-config-status">설정 로드 대기</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="workflow-banner workflow-banner-compact">
+      <div class="workflow-step is-active">
+        <span class="workflow-index">1</span>
+        <div>
+          <strong>템플릿 선택</strong>
+          <p>뉴스와 프로젝트 워크플로우별 역할 세트를 분리해 관리합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">2</span>
+        <div>
+          <strong>YAML 편집</strong>
+          <p>역할 수, 역할 설명, 추천 provider와 기본 judge를 하나의 설정 파일에서 수정합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">3</span>
+        <div>
+          <strong>미리보기 검증</strong>
+          <p>저장 전에 템플릿 목록과 역할 구성을 확인하고 적용합니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="settings-layout">
+      <aside class="settings-sidebar">
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge">Config</span>
+            <div>
+              <h2>설정 파일</h2>
+              <p>역할 템플릿은 YAML 파일에서 읽고, 이 페이지에서 그대로 편집합니다.</p>
+            </div>
+          </div>
+          <div class="settings-path-card">
+            <span class="mini-badge">YAML</span>
+            <strong id="role-config-path">역할 설정 파일 경로를 불러오는 중입니다.</strong>
+            <p id="role-config-meta">로컬 override가 있으면 우선 적용되고, 없으면 기본 템플릿을 사용합니다.</p>
+          </div>
+          <div class="settings-metrics">
+            <div class="settings-metric">
+              <span>참가자 수 제한</span>
+              <strong>2~3명</strong>
+            </div>
+            <div class="settings-metric">
+              <span>워크플로우</span>
+              <strong>뉴스 / 프로젝트</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">Action</span>
+            <div>
+              <h2>편집 액션</h2>
+              <p>변경 전 다시 불러오거나, 기본 템플릿으로 되돌린 뒤 저장할 수 있습니다.</p>
+            </div>
+          </div>
+          <div class="settings-action-stack">
+            <button class="button" type="button" id="role-config-save">설정 저장</button>
+            <button class="button subtle" type="button" id="role-config-reload">파일 다시 불러오기</button>
+            <button class="button subtle" type="button" id="role-config-reset">기본 템플릿 복원</button>
+          </div>
+          <p class="form-status" id="role-config-validation">유효성 검사 결과가 이곳에 표시됩니다.</p>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">Guide</span>
+            <div>
+              <h2>권장 규칙</h2>
+              <p>역할이 많아질수록 토큰 비용과 중복 발화가 커지므로 역할 정의를 짧고 선명하게 유지합니다.</p>
+            </div>
+          </div>
+          <div class="settings-guidelines">
+            <div class="guideline-item">
+              <strong>뉴스 토론</strong>
+              <p>경제, 시장, 정책/법률 관점을 분리하고 3인 구성을 우선 추천합니다.</p>
+            </div>
+            <div class="guideline-item">
+              <strong>프로젝트 개선</strong>
+              <p>UX, 백엔드, 아키텍처, QA처럼 실행 관점을 분리하되 주제와 무관한 역할은 빼는 편이 낫습니다.</p>
+            </div>
+            <div class="guideline-item">
+              <strong>같은 모델 재사용</strong>
+              <p>가능하지만 역할 설명, 우선순위, 필수 질문을 명확히 적어야 답변이 수렴하지 않습니다.</p>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="settings-main">
+        <section class="workbench-card settings-editor-card">
+          <div class="pane-header">
+            <div>
+              <h3>역할 템플릿 YAML</h3>
+              <p>워크플로우, 템플릿, 역할 정의를 직접 수정합니다. 저장 전에는 미리보기 카드에서 구조를 다시 확인하세요.</p>
+            </div>
+            <span class="mini-badge" id="role-config-revision">초안</span>
+          </div>
+          <textarea
+            class="yaml-editor"
+            id="role-config-editor"
+            spellcheck="false"
+            aria-label="역할 템플릿 YAML 편집기"
+            placeholder="role-template YAML을 불러오는 중입니다."
+          ></textarea>
+        </section>
+
+        <section class="settings-preview-grid">
+          <article class="workbench-card">
+            <div class="pane-header">
+              <div>
+                <h3>뉴스 템플릿 미리보기</h3>
+                <p>시장, 정책, 법률, 정치 관점을 어떤 조합으로 쓸지 점검합니다.</p>
+              </div>
+            </div>
+            <div class="settings-preview-list" id="news-template-preview">
+              <div class="empty-state compact">
+                <strong>미리볼 템플릿이 아직 없습니다.</strong>
+                <p>YAML이 로드되면 뉴스 토론용 템플릿이 이곳에 정리됩니다.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="workbench-card">
+            <div class="pane-header">
+              <div>
+                <h3>프로젝트 템플릿 미리보기</h3>
+                <p>UX, 구조, 운영 관점 템플릿을 비교해 기본값을 정합니다.</p>
+              </div>
+            </div>
+            <div class="settings-preview-list" id="project-template-preview">
+              <div class="empty-state compact">
+                <strong>미리볼 템플릿이 아직 없습니다.</strong>
+                <p>YAML이 로드되면 프로젝트 개선용 템플릿이 이곳에 정리됩니다.</p>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">Example</span>
+            <div>
+              <h2>권장 템플릿 구조</h2>
+              <p>역할 정의가 지나치게 길어지지 않도록, 역할 설명과 필수 질문은 한 번에 읽히는 길이로 유지합니다.</p>
+            </div>
+          </div>
+          <pre class="settings-snippet"><code>version: 1
+workflows:
+  news:
+    templates:
+      - id: market-triad
+        label: 시장 영향 3자 토론
+        description: 시장과 정책, 규제 리스크를 함께 본다.
+        participants:
+          - roleId: macro
+            label: 경제 전문가
+            focus: 거시경제와 산업 파급을 해석한다.
+            defaultProvider: claude
+            instructions:
+              - 단기와 중기 영향을 나눠 설명한다.
+          - roleId: equities
+            label: 주식 분석가
+            focus: 상장사와 투자 신호를 해석한다.
+            defaultProvider: codex
+          - roleId: policy
+            label: 정책 관점
+            focus: 집행 가능성과 운영 리스크를 본다.
+            defaultProvider: gemini
+  project:
+    templates:
+      - id: product-triad
+        label: 제품 개선 3자 토론
+        description: UX와 구현, 검증 관점을 함께 본다.
+        participants:
+          - roleId: ux
+            label: UX 전문가
+            focus: 사용자 흐름과 정보 구조를 점검한다.
+            defaultProvider: claude
+          - roleId: backend
+            label: 백엔드 개발자
+            focus: 구현 난이도와 운영 복잡도를 검토한다.
+            defaultProvider: codex
+          - roleId: qa
+            label: QA
+            focus: 회귀 위험과 테스트 전략을 검토한다.
+            defaultProvider: gemini</code></pre>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

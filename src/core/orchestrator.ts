@@ -9,11 +9,15 @@ import type {
   ProviderName,
 } from '../types/debate.js';
 import type { DebateEvent } from '../types/debate-events.js';
-import type { SessionStore } from './session-store.js';
+import type { DebateParticipant } from '../types/roles.js';
+import type { SessionEvidenceSummary, SessionStore } from './session-store.js';
 import { DebateContext } from './context.js';
+import { normalizeDebateParticipants } from './participants.js';
 import { getPromptBuilders, getSynthesisPromptBuilder } from './prompt-builder.js';
+import { buildFallbackRoundState, RoundStateExtractor } from './round-state.js';
 import { Synthesizer } from './synthesizer.js';
 import { isProviderTimeoutError } from '../providers/errors.js';
+import { summarizeSnapshot } from '../news/snapshot.js';
 
 type CancellationReason = 'user_cancelled' | 'timeout' | 'server_shutdown';
 
@@ -60,7 +64,7 @@ export class DebateOrchestrator {
     const synthBuilder = getSynthesisPromptBuilder(mode);
 
     const { rounds, stream } = options;
-    const participants = options.participants ?? (['codex', 'claude'] as [ProviderName, ProviderName]);
+    const participants = normalizeDebateParticipants(options.participants);
     const context = new DebateContext(
       options.question,
       options.projectContext,
@@ -75,9 +79,15 @@ export class DebateOrchestrator {
       this.sessionStore.create(sessionId, {
         sessionId,
         question: options.question,
-        participants,
+        participants: toEventParticipants(participants),
         rounds: options.rounds,
         createdAt: Date.now(),
+        judge: options.judge,
+        mode: mode,
+        workflowKind: options.workflowKind ?? 'general',
+        executionCwd: options.executionCwd,
+        evidence: toSessionEvidenceSummary(options.snapshot),
+        ollamaModel: options.ollamaModel,
       });
       this.sessionStore.updateStatus(sessionId, 'RUNNING');
     }
@@ -92,39 +102,37 @@ export class DebateOrchestrator {
           type: 'round_started',
           sessionId,
           timestamp: Date.now(),
-          payload: { round, total: rounds, participants },
+          payload: { round, total: rounds, totalRounds: rounds, participants: toEventParticipants(participants) },
         });
 
         const phase = round === 1 ? 'opening' : 'rebuttal';
-        const [first, second] = participants;
 
-        // First provider goes first
-        await this.executeTurn(
-          context,
-          first,
-          round,
-          phase,
-          stream,
-          callbacks,
-          sessionId,
-          options.signal,
-          options.executionCwd,
-        );
-
-        // Second provider responds
-        // On round 1, second's opening also includes rebuttal to first
-        const secondPhase = round === 1 ? 'opening' : 'rebuttal';
-        await this.executeTurn(
-          context,
-          second,
-          round,
-          secondPhase,
-          stream,
-          callbacks,
-          sessionId,
-          options.signal,
-          options.executionCwd,
-        );
+        if (round === 1) {
+          await this.executeParallelOpeningTurns(
+            context,
+            participants,
+            round,
+            stream,
+            callbacks,
+            sessionId,
+            options.signal,
+            options.executionCwd,
+          );
+        } else {
+          for (const participant of participants) {
+            await this.executeTurn(
+              context,
+              participant,
+              round,
+              phase,
+              stream,
+              callbacks,
+              sessionId,
+              options.signal,
+              options.executionCwd,
+            );
+          }
+        }
 
         // User turn (interactive mode)
         if (options.interactive && callbacks.onUserInput) {
@@ -133,14 +141,33 @@ export class DebateOrchestrator {
 
         // Collect round messages
         const roundMessages = context.getMessages()
-          .filter((m) => m.round === round && m.provider !== 'user')
-          .map((m) => ({ provider: m.provider, phase: m.phase, content: m.content }));
+          .filter((m) => m.round === round)
+          .map((m) => ({
+            provider: m.provider,
+            participantId: m.participantId,
+            label: m.label,
+            phase: m.phase,
+            content: m.content,
+          }));
 
         this.emitEvent({
           type: 'round_finished',
           sessionId,
           timestamp: Date.now(),
           payload: { round, messages: roundMessages },
+        });
+        const roundState = await this.buildRoundState(
+          context,
+          options.question,
+          round,
+          options.judge,
+        );
+        context.addRoundState(roundState);
+        this.emitEvent({
+          type: 'round_state_ready',
+          sessionId,
+          timestamp: Date.now(),
+          payload: roundState,
         });
         this.sessionStore?.updateStatus(sessionId, 'ROUND_COMPLETE');
       }
@@ -172,6 +199,7 @@ export class DebateOrchestrator {
               options.signal,
               options.executionCwd,
               options.snapshot,
+              context.getRoundStates(),
             )) {
               this.ensureNotAborted(sessionId, options.signal, rounds, judgeProviderName);
               callbacks.onSynthesisToken(token);
@@ -179,7 +207,14 @@ export class DebateOrchestrator {
                 type: 'agent_chunk',
                 sessionId,
                 timestamp: Date.now(),
-                payload: { provider: judgeProviderName, token, round: rounds, phase: 'synthesis' },
+                payload: {
+                  provider: judgeProviderName,
+                  participantId: 'judge',
+                  label: 'Judge',
+                  token,
+                  round: rounds,
+                  phase: 'synthesis',
+                },
               });
               chunks.push(token);
             }
@@ -190,6 +225,7 @@ export class DebateOrchestrator {
               options.question,
               context.getMessages(),
               options.snapshot,
+              context.getRoundStates(),
             );
           }
         } catch (error) {
@@ -226,6 +262,7 @@ export class DebateOrchestrator {
       return {
         question: options.question,
         messages: context.getMessages(),
+        roundStates: context.getRoundStates(),
         synthesis,
         rounds,
       };
@@ -259,6 +296,8 @@ export class DebateOrchestrator {
     }
 
     const message: DebateMessage = {
+      participantId: 'user',
+      label: 'User',
       provider: 'user',
       round,
       phase: 'rebuttal',
@@ -270,7 +309,7 @@ export class DebateOrchestrator {
 
   private async executeTurn(
     context: DebateContext,
-    provider: ProviderName,
+    participant: DebateParticipant,
     round: number,
     phase: 'opening' | 'rebuttal',
     stream: boolean,
@@ -279,58 +318,191 @@ export class DebateOrchestrator {
     signal?: AbortSignal,
     executionCwd?: string,
   ): Promise<void> {
-    this.ensureNotAborted(sessionId, signal, round, provider);
+    this.ensureNotAborted(sessionId, signal, round, participant.provider);
 
-    callbacks.onTurnStart(provider, phase);
+    callbacks.onTurnStart(participant, phase);
     this.sessionStore?.updateStatus(sessionId, 'STREAMING');
 
-    const messages = context.buildMessagesFor(provider, round, phase);
-    const aiProvider = this.getProvider(provider);
+    const message = await this.generateTurnMessage(
+      context,
+      participant,
+      round,
+      phase,
+      stream,
+      callbacks,
+      sessionId,
+      signal,
+      executionCwd,
+      true,
+    );
+    context.addMessage(message);
+    this.sessionStore?.updateStatus(sessionId, 'RUNNING');
+    callbacks.onTurnEnd(participant, message.content);
+  }
 
-    let content: string;
+  private async executeParallelOpeningTurns(
+    context: DebateContext,
+    participants: DebateParticipant[],
+    round: number,
+    stream: boolean,
+    callbacks: DebateCallbacks,
+    sessionId: string,
+    signal?: AbortSignal,
+    executionCwd?: string,
+  ): Promise<void> {
+    this.sessionStore?.updateStatus(sessionId, 'STREAMING');
+
+    const settled = await Promise.allSettled(
+      participants.map((participant) =>
+        this.generateTurnMessage(
+          context,
+          participant,
+          round,
+          'opening',
+          stream,
+          callbacks,
+          sessionId,
+          signal,
+          executionCwd,
+          false,
+          false,
+        )
+      )
+    );
+
+    const rejected = settled.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (rejected) {
+      throw rejected.reason;
+    }
+
+    const messages = settled.map((result) => (result as PromiseFulfilledResult<DebateMessage>).value);
+    for (const message of messages) {
+      const participant = participants.find((entry) => entry.id === message.participantId);
+      if (!participant) continue;
+      callbacks.onTurnStart(participant, message.phase);
+      if (stream) {
+        this.emitBufferedTurnChunk(sessionId, message);
+      }
+      context.addMessage(message);
+      callbacks.onTurnEnd(participant, message.content);
+    }
+    this.sessionStore?.updateStatus(sessionId, 'RUNNING');
+  }
+
+  private async generateTurnMessage(
+    context: DebateContext,
+    participant: DebateParticipant,
+    round: number,
+    phase: 'opening' | 'rebuttal',
+    stream: boolean,
+    callbacks: DebateCallbacks,
+    sessionId: string,
+    signal?: AbortSignal,
+    executionCwd?: string,
+    forwardTokens = true,
+    emitChunkEvents = true,
+  ): Promise<DebateMessage> {
+    this.ensureNotAborted(sessionId, signal, round, participant.provider);
+
+    const messages = context.buildMessagesFor(participant, round, phase);
+    const aiProvider = this.getProvider(participant.provider);
+
     try {
-      content = await this.callWithRetry(
+      const content = await this.callWithRetry(
         async () => {
           if (stream) {
             const chunks: string[] = [];
             for await (const token of aiProvider.stream(messages, signal, executionCwd)) {
-              this.ensureNotAborted(sessionId, signal, round, provider);
-              callbacks.onToken(provider, token);
-              this.emitEvent({
-                type: 'agent_chunk',
-                sessionId,
-                timestamp: Date.now(),
-                payload: { provider, token, round, phase },
-              });
+              this.ensureNotAborted(sessionId, signal, round, participant.provider);
+              if (forwardTokens) {
+                callbacks.onToken(participant, token);
+              }
+              if (emitChunkEvents) {
+                this.emitEvent({
+                  type: 'agent_chunk',
+                  sessionId,
+                  timestamp: Date.now(),
+                  payload: {
+                    provider: participant.provider,
+                    participantId: participant.id,
+                    label: participant.label,
+                    token,
+                    round,
+                    phase,
+                  },
+                });
+              }
               chunks.push(token);
             }
             return chunks.join('');
           }
-          return await aiProvider.generate(messages);
+          return aiProvider.generate(messages);
         },
-        provider,
+        participant,
         callbacks,
         3,
         sessionId
       );
+
+      return {
+        participantId: participant.id,
+        label: participant.label,
+        provider: participant.provider,
+        round,
+        phase,
+        content,
+      };
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
-        this.emitCancellation(sessionId, this.getCancellationReason(signal), round, provider);
+        this.emitCancellation(sessionId, this.getCancellationReason(signal), round, participant.provider);
       } else if (isProviderTimeoutError(error)) {
-        this.emitCancellation(sessionId, 'timeout', round, provider);
+        this.emitCancellation(sessionId, 'timeout', round, participant.provider);
       }
       throw error;
     }
+  }
 
-    const message: DebateMessage = { provider, round, phase, content };
-    context.addMessage(message);
-    this.sessionStore?.updateStatus(sessionId, 'RUNNING');
-    callbacks.onTurnEnd(provider, content);
+  private emitBufferedTurnChunk(sessionId: string, message: DebateMessage): void {
+    if (!message.content) return;
+
+    this.emitEvent({
+      type: 'agent_chunk',
+      sessionId,
+      timestamp: Date.now(),
+      payload: {
+        provider: message.provider,
+        participantId: message.participantId,
+        label: message.label,
+        token: message.content,
+        round: message.round,
+        phase: message.phase,
+      },
+    });
+  }
+
+  private async buildRoundState(
+    context: DebateContext,
+    question: string,
+    round: number,
+    judge: JudgeOption,
+  ) {
+    const roundMessages = context.getMessagesForRound(round);
+    const judgeProvider = this.getJudgeProvider(judge);
+    const extractor = new RoundStateExtractor(judgeProvider);
+
+    try {
+      return await extractor.extract(question, roundMessages, round);
+    } catch (error) {
+      const warning = error instanceof Error ? error.message : String(error);
+      return buildFallbackRoundState(roundMessages, round, warning);
+    }
   }
 
   private async callWithRetry(
     fn: () => Promise<string>,
-    provider: ProviderName,
+    participant: DebateParticipant,
     callbacks: DebateCallbacks,
     maxAttempts = 3,
     sessionId?: string
@@ -355,7 +527,7 @@ export class DebateOrchestrator {
               payload: {
                 code: isRateLimitError(error) ? 'RATE_LIMIT_EXCEEDED' : 'PROVIDER_UNAVAILABLE',
                 message: error instanceof Error ? error.message : String(error),
-                provider,
+                provider: participant.provider,
                 round: undefined,
                 retryable: false,
               },
@@ -363,7 +535,7 @@ export class DebateOrchestrator {
           }
           throw error;
         }
-        callbacks.onRetry(provider, attempt, maxAttempts, error as Error);
+        callbacks.onRetry(participant, attempt, maxAttempts, error as Error);
         await delay(attempt * 5000);
       }
     }
@@ -412,6 +584,31 @@ export class DebateOrchestrator {
     });
     this.sessionStore?.updateStatus(sessionId, reason === 'timeout' ? 'FAILED' : 'CANCELLED');
   }
+}
+
+function toSessionEvidenceSummary(snapshot?: DebateOptions['snapshot']): SessionEvidenceSummary | undefined {
+  if (!snapshot) {
+    return undefined;
+  }
+
+  const summary = summarizeSnapshot(snapshot);
+  return {
+    id: summary.id,
+    query: summary.query,
+    collectedAt: summary.collectedAt,
+    articleCount: summary.articleCount,
+    sources: summary.sources,
+    topDomains: summary.topDomains,
+    excludedCount: summary.excludedCount,
+  };
+}
+
+function toEventParticipants(participants: DebateParticipant[]) {
+  return participants.map((participant) => ({
+    id: participant.id,
+    label: participant.label,
+    provider: participant.provider,
+  }));
 }
 
 function isRateLimitError(error: unknown): boolean {

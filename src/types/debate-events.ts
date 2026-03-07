@@ -1,8 +1,18 @@
+import type { DebateRoundState } from './debate.js';
+import type { DebateParticipant } from './roles.js';
+
+export interface DebateEventParticipant {
+  id: DebateParticipant['id']
+  label: DebateParticipant['label']
+  provider: DebateParticipant['provider']
+}
+
 // DebateEvent v1 - 이벤트 타입 열거형
 export type DebateEventType =
   | 'round_started'
   | 'agent_chunk'
   | 'round_finished'
+  | 'round_state_ready'
   | 'synthesis_ready'
   | 'cancelled'
   | 'error'
@@ -20,7 +30,8 @@ export interface RoundStartedEvent extends DebateEventBase {
   payload: {
     round: number
     total: number
-    participants: [string, string]
+    totalRounds?: number
+    participants: DebateEventParticipant[]
   }
 }
 
@@ -29,6 +40,8 @@ export interface AgentChunkEvent extends DebateEventBase {
   type: 'agent_chunk'
   payload: {
     provider: string
+    participantId: string
+    label: string
     token: string
     round: number
     phase: 'opening' | 'rebuttal' | 'synthesis'
@@ -42,10 +55,18 @@ export interface RoundFinishedEvent extends DebateEventBase {
     round: number
     messages: Array<{
       provider: string
+      participantId: string
+      label: string
       phase: 'opening' | 'rebuttal'
       content: string
     }>
   }
+}
+
+// round_state_ready
+export interface RoundStateReadyEvent extends DebateEventBase {
+  type: 'round_state_ready'
+  payload: DebateRoundState
 }
 
 // synthesis_ready
@@ -95,6 +116,7 @@ export type DebateEvent =
   | RoundStartedEvent
   | AgentChunkEvent
   | RoundFinishedEvent
+  | RoundStateReadyEvent
   | SynthesisReadyEvent
   | CancelledEvent
   | ErrorEvent

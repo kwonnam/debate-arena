@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>프로젝트 개선 워크벤치</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-workflow="project">
+    <div class="background-glow"></div>
+
+    <header class="app-header app-header-split">
+      <div class="hero-copy">
+        <p class="eyebrow">DEBATE ARENA / PROJECT WORKBENCH</p>
+        <h1>프로젝트 개선 아이디어 워크벤치</h1>
+        <p class="subtitle">
+          로컬 작업공간을 기준으로 UX 개선, 구조 개편, 기술 부채 정리를 토론하는 전용 페이지입니다.
+        </p>
+      </div>
+      <div class="header-actions header-actions-column">
+        <nav class="page-switcher" aria-label="워크벤치 이동">
+          <a class="page-link" href="/">허브</a>
+          <a class="page-link is-active" href="/project.html">프로젝트 개선</a>
+          <a class="page-link" href="/news.html">뉴스 기반 토론</a>
+          <a class="page-link" href="/settings.html">설정</a>
+        </nav>
+        <div class="header-toolbar">
+          <button class="button subtle" id="refresh" type="button">새로고침</button>
+          <span class="status-pill" id="server-status">Project page</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="workflow-banner workflow-banner-compact">
+      <div class="workflow-step is-active">
+        <span class="workflow-index">1</span>
+        <div>
+          <strong>프로젝트 범위 지정</strong>
+          <p>질문, 파일, 실행 경로를 명확히 지정해 로컬 문맥을 고정합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">2</span>
+        <div>
+          <strong>다중 모델 토론</strong>
+          <p>서로 다른 모델이 프로젝트 개선안을 라운드별로 검토합니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">3</span>
+        <div>
+          <strong>실행 가능한 결론</strong>
+          <p>합의점, 쟁점, 다음 포커스를 synthesis와 함께 정리합니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="conn-status-bar" id="conn-status-bar">
+      <span class="conn-badge state-idle" id="conn-badge">⚪ Idle</span>
+      <div class="round-progress" id="round-progress" style="display:none">
+        <span id="round-label">Round 1 / 3</span>
+        <div class="round-bar"><div class="round-fill" id="round-fill"></div></div>
+      </div>
+      <div class="gap-banner" id="gap-banner" style="display:none">⚠️ 이벤트 간극 감지, 1번부터 다시 재생합니다.</div>
+      <div class="runtime-actions">
+        <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
+        <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
+        <label class="runtime-label">
+          Replay from
+          <input type="number" id="replay-seq" min="1" placeholder="1" />
+        </label>
+        <button class="button subtle runtime-btn" id="replay" type="button">재생</button>
+        <button class="button subtle runtime-btn" id="export-md" type="button">마크다운 내보내기</button>
+      </div>
+      <p class="form-status" id="execute-status"></p>
+    </div>
+
+    <div class="workbench-layout">
+      <aside class="sidebar-column">
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge">Local</span>
+            <div>
+              <h2>프로젝트 개선 아이디어</h2>
+              <p>로컬 프로젝트를 기준으로 UX, 구조, 기술 부채 개선 방향을 토론합니다.</p>
+            </div>
+          </div>
+
+          <form class="provider-form" id="project-form">
+            <div class="field">
+              <label>개선 질문</label>
+              <textarea
+                name="question"
+                rows="5"
+                placeholder="예: 이 프로젝트를 대시보드 중심 제품으로 발전시키려면 어떤 구조와 UX 개선이 필요한가?"
+                required
+              ></textarea>
+            </div>
+
+            <div class="template-row">
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="project"
+                data-template="이 프로젝트의 UX 흐름을 사용자 관점에서 개선하는 아이디어를 토론해줘"
+              >
+                UX 개선
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="project"
+                data-template="이 코드베이스의 아키텍처와 정보 구조를 어떻게 정리하면 유지보수성이 좋아질지 토론해줘"
+              >
+                아키텍처
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="project"
+                data-template="이 프로젝트의 기술 부채와 성능 병목을 어떻게 줄일지 우선순위를 포함해 토론해줘"
+              >
+                기술 부채
+              </button>
+            </div>
+
+            <div class="field">
+              <label>로컬 프로젝트 경로</label>
+              <input name="executionCwd" id="project-execution-cwd" placeholder="/absolute/path or ./relative" />
+              <small class="field-hint" id="project-runtime-hint">현재 로컬 작업 디렉터리를 기본값으로 채웁니다.</small>
+            </div>
+
+            <div class="field">
+              <label>관련 파일</label>
+              <input name="questionFiles" type="file" multiple />
+              <small class="field-hint">텍스트 파일은 본문으로, 이미지는 data URL로 포함됩니다.</small>
+            </div>
+
+            <button class="button subtle wide-button" type="button" id="project-advanced-toggle">고급 설정 보기</button>
+
+            <div class="advanced-fields collapsed" id="project-advanced-fields">
+              <div class="inline-fields">
+                <div class="field">
+                  <label>라운드 수</label>
+                  <input name="rounds" type="number" min="1" max="8" value="3" />
+                </div>
+                <div class="field">
+                  <label>Timeout (s)</label>
+                  <input name="timeoutSeconds" type="number" min="30" max="1800" value="900" />
+                </div>
+              </div>
+
+              <label class="toggle-field">
+                <input name="noContext" type="checkbox" />
+                <span>프로젝트 자동 컨텍스트를 끕니다</span>
+              </label>
+
+              <div class="field">
+                <label>토론 템플릿</label>
+                <select name="templateId" id="project-template-select"></select>
+                <div class="field-hint" id="project-template-description">역할 템플릿을 불러오는 중입니다.</div>
+              </div>
+
+              <div class="role-preset-grid" id="project-participant-config"></div>
+
+              <div class="field">
+                <label>Judge</label>
+                <select name="judge">
+                  <option value="claude">claude</option>
+                  <option value="codex">codex</option>
+                  <option value="gemini">gemini</option>
+                  <option value="both">both</option>
+                </select>
+                <small class="field-hint">참가자는 2~3명까지만 지원하며, 같은 모델을 다른 역할로 반복 선택할 수 있습니다.</small>
+              </div>
+
+              <div class="execute-actions">
+                <a class="button subtle" href="/settings.html">역할 YAML 편집</a>
+              </div>
+            </div>
+
+            <div class="execute-actions">
+              <button class="button" type="submit">프로젝트 개선 토론 시작</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">현재</span>
+            <div>
+              <h2>세션 컨텍스트</h2>
+              <p>현재 선택한 프로젝트 세션의 실행 범위와 상태를 확인합니다.</p>
+            </div>
+          </div>
+          <div class="session-context" id="session-brief">
+            <div class="empty-state">
+              <strong>선택된 세션이 없습니다.</strong>
+              <p>프로젝트 개선 토론을 시작하거나, 아래 세션을 선택하세요.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge muted">기록</span>
+            <div>
+              <h2>최근 프로젝트 세션</h2>
+              <p>프로젝트 개선 흐름에서 생성된 세션만 별도로 표시합니다.</p>
+            </div>
+          </div>
+          <div class="session-list" id="session-list"></div>
+        </section>
+      </aside>
+
+      <main class="main-column">
+        <section class="workbench-card">
+          <div class="section-heading">
+            <span class="step-badge">Round</span>
+            <div>
+              <h2>라운드 보드</h2>
+              <p>현재 라운드의 핵심 쟁점, 합의점, 다음 포커스를 요약하고 이전 라운드도 다시 열 수 있습니다.</p>
+            </div>
+          </div>
+          <div class="round-history" id="round-history" role="tablist" aria-label="라운드 보드 선택"></div>
+          <div class="decision-board empty" id="decision-board">라운드가 끝나면 핵심 보드가 이곳에 표시됩니다.</div>
+          <div class="participant-lanes" id="participant-lanes"></div>
+        </section>
+
+        <section class="debate-grid">
+          <article class="workbench-card">
+            <div class="pane-header">
+              <div>
+                <h3>실시간 토론 스트림</h3>
+                <p>토큰 단위로 올라오는 발화를 한 화면에서 관찰합니다.</p>
+              </div>
+            </div>
+            <div class="bubble-stream" id="stream"></div>
+            <div class="typing-indicator" id="typing-indicator" style="display:none">
+              <span></span><span></span><span></span>
+            </div>
+          </article>
+
+          <article class="workbench-card">
+            <div class="pane-header">
+              <div>
+                <h3>타임라인</h3>
+                <p>라운드 시작, 완료, synthesis 이벤트를 시간순으로 확인합니다.</p>
+              </div>
+            </div>
+            <div class="timeline" id="timeline"></div>
+          </article>
+        </section>
+
+        <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
+          <span class="synthesis-hero-label">Synthesis</span>
+          <div id="synthesis"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

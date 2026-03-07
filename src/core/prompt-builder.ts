@@ -1,16 +1,19 @@
-import type { DebateMode, ParticipantName, ProviderName } from '../types/debate.js';
+import type { DebateMode, DebateRoundState, ParticipantName, ProviderName } from '../types/debate.js';
+import type { DebateParticipant } from '../types/roles.js';
+import { buildParticipantRolePrompt } from '../roles/config.js';
 
 // --- Interfaces ---
 
 export interface PromptBuilders {
-  systemPrompt: (provider: ProviderName, projectContext?: string, participants?: ProviderName[]) => string;
+  systemPrompt: (participant: DebateParticipant, projectContext?: string, participants?: DebateParticipant[]) => string;
   openingPrompt: (question: string) => string;
-  rebuttalPrompt: (opponentProvider: ParticipantName, opponentResponse: string) => string;
+  rebuttalPrompt: (opponentLabel: ParticipantName, opponentResponse: string) => string;
 }
 
 export type SynthesisPromptBuilder = (
   question: string,
-  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
+  roundStates?: DebateRoundState[],
 ) => string;
 
 export type ApplyPromptBuilder = (
@@ -19,6 +22,12 @@ export type ApplyPromptBuilder = (
   approachLabel: string,
   executor: ProviderName,
   isSecondPass?: boolean
+) => string;
+
+export type RoundStatePromptBuilder = (
+  question: string,
+  round: number,
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>
 ) => string;
 
 const KNOWN_PROVIDER_LABELS: Record<string, string> = {
@@ -32,38 +41,49 @@ function providerLabel(provider: ProviderName): string {
   return KNOWN_PROVIDER_LABELS[provider] ?? provider;
 }
 
-function participantLabel(provider: ParticipantName): string {
-  if (provider === 'user') return 'User';
-  return providerLabel(provider);
+function participantLabel(label: ParticipantName): string {
+  if (label === 'user') return 'User';
+  return label;
 }
 
-function opponentOf(provider: ProviderName, participants?: ProviderName[]): ProviderName {
-  if (participants) {
-    return participants.find(p => p !== provider) ?? 'claude';
+function buildOtherParticipantSummary(
+  participant: DebateParticipant,
+  participants?: DebateParticipant[],
+): string {
+  const others = (participants || []).filter((entry) => entry.id !== participant.id);
+  if (others.length === 0) {
+    return 'other specialist participants';
   }
-  if (provider === 'codex') return 'claude';
-  if (provider === 'claude') return 'codex';
-  return 'codex';
+
+  return others
+    .map((entry) => `${entry.label} (${providerLabel(entry.provider)})`)
+    .join(', ');
 }
 
 export function buildDebaterSystemPrompt(
-  provider: ProviderName,
+  participant: DebateParticipant,
   projectContext?: string,
-  participants?: ProviderName[]
+  participants?: DebateParticipant[]
 ): string {
-  const self = providerLabel(provider);
-  const opponent = providerLabel(opponentOf(provider, participants));
+  const self = participant.label;
+  const provider = providerLabel(participant.provider);
+  const otherParticipants = buildOtherParticipantSummary(participant, participants);
+  const rolePrompt = buildParticipantRolePrompt(participant.role);
 
   const lines = [
-    `You are ${self}, participating in a structured debate with ${opponent}.`,
+    `You are ${self}, participating in a structured debate with ${otherParticipants}.`,
+    `Your underlying model/provider is ${provider}.`,
+    '',
+    rolePrompt,
     '',
     'Rules:',
     '1. Present clear, well-reasoned arguments backed by evidence.',
-    '2. When rebutting, directly address your opponent\'s points before presenting your own.',
-    '3. Acknowledge valid points from your opponent when appropriate.',
+    '2. When rebutting, directly address the strongest points from the other participants before presenting your own.',
+    '3. Acknowledge valid points from the other participants when appropriate.',
     '4. Be concise but thorough. Aim for 200-400 words per response.',
     '5. Use a professional, respectful tone.',
     '6. Respond in the same language as the question.',
+    '7. Stay inside your assigned role. Do not collapse into a generic neutral answer.',
   ];
 
   if (projectContext) {
@@ -104,25 +124,35 @@ export function buildRebuttalPrompt(
 
 export function buildSynthesisPrompt(
   question: string,
-  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
+  roundStates: DebateRoundState[] = [],
 ): string {
   const transcript = debateLog
     .map(
       (entry) =>
-        `[Round ${entry.round} - ${participantLabel(entry.provider)}]\n${entry.content}`
+        `[Round ${entry.round} - ${participantLabel(entry.label)}]\n${entry.content}`
     )
     .join('\n\n---\n\n');
 
-  const hasUser = debateLog.some((e) => e.provider === 'user');
-  const debateProviders = [...new Set(debateLog.filter(e => e.provider !== 'user').map(e => e.provider))];
+  const hasUser = debateLog.some((e) => e.label === 'user');
+  const debateProviders = [...new Set(debateLog.filter((e) => e.label !== 'user').map((e) => e.label))];
   const providerLabels = debateProviders.map((p) => participantLabel(p as ParticipantName)).join(', ');
   const participants = hasUser ? `${providerLabels}, and the User` : providerLabels;
+  const roundStateSection = roundStates.length > 0
+    ? [
+        'Compressed Round States:',
+        '',
+        buildRoundStateSummaryPreamble(roundStates),
+        '',
+      ]
+    : [];
 
   return [
     `You are a fair and balanced judge reviewing a debate between ${participants}.`,
     '',
     `Original Question: "${question}"`,
     '',
+    ...roundStateSection,
     'Full Debate Transcript:',
     '',
     transcript,
@@ -136,15 +166,115 @@ export function buildSynthesisPrompt(
   ].join('\n');
 }
 
+export function buildRoundStatePrompt(
+  question: string,
+  round: number,
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>
+): string {
+  const transcript = debateLog
+    .map(
+      (entry) =>
+        `[Round ${entry.round} - ${participantLabel(entry.label)}]\n${entry.content}`
+    )
+    .join('\n\n---\n\n');
+
+  return [
+    'You are extracting a compact reusable state for the next debate round.',
+    '',
+    `Original Question: "${question}"`,
+    `Completed Round: ${round}`,
+    '',
+    'Round Transcript:',
+    '',
+    transcript,
+    '',
+    'Return plain text using exactly these sections:',
+    'SUMMARY: one concise paragraph',
+    'ISSUES:',
+    '- unresolved issue 1',
+    '- unresolved issue 2',
+    'AGREEMENTS:',
+    '- agreement 1',
+    'NEXT_FOCUS:',
+    '- what the next round should focus on',
+    'STOP_SUGGESTED: yes|no',
+    'STOP_REASON: brief reason, or "none"',
+    '',
+    'Requirements:',
+    '- Keep the output compact and factual.',
+    '- Prefer unresolved disagreements over repeating the full transcript.',
+    '- Use the same language as the debate.',
+  ].join('\n');
+}
+
+export function buildRoundStateContextSection(states: DebateRoundState[]): string {
+  const lines = [
+    '## Debate State So Far',
+    'Use this compressed state as the primary context. Avoid repeating settled points.',
+    '',
+  ];
+
+  for (const state of states) {
+    lines.push(`[Round ${state.round}]`);
+    lines.push(`Summary: ${state.summary}`);
+
+    if (state.keyIssues.length > 0) {
+      lines.push('Key issues:');
+      lines.push(...state.keyIssues.map((issue) => `- ${issue}`));
+    }
+
+    if (state.agreements.length > 0) {
+      lines.push('Agreements:');
+      lines.push(...state.agreements.map((item) => `- ${item}`));
+    }
+
+    if (state.nextFocus.length > 0) {
+      lines.push('Next focus:');
+      lines.push(...state.nextFocus.map((item) => `- ${item}`));
+    }
+
+    if (state.shouldSuggestStop) {
+      lines.push(`Debate efficiency signal: consider concluding soon. Reason: ${state.stopReason ?? 'not specified'}`);
+    }
+
+    if (state.warning) {
+      lines.push(`Warning: ${state.warning}`);
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
+}
+
+export function buildTranscriptFallbackSection(
+  round: number,
+  messages: Array<{ label: ParticipantName; content: string }>
+): string {
+  const transcript = messages
+    .map((message) => `### ${participantLabel(message.label)}\n${message.content}`)
+    .join('\n\n');
+
+  return [
+    `## Transcript Fallback For Round ${round}`,
+    'Structured extraction was unavailable, so use this raw transcript for accuracy.',
+    '',
+    transcript,
+  ].join('\n');
+}
+
 import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
+
+const MAX_ROUND_EVIDENCE_ARTICLES = 4;
 
 export function buildSynthesisPromptWithEvidence(
   question: string,
-  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>,
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
   snapshot?: EvidenceSnapshot,
+  roundStates: DebateRoundState[] = [],
 ): string {
   if (!snapshot) {
-    return buildSynthesisPrompt(question, debateLog);
+    return buildSynthesisPrompt(question, debateLog, roundStates);
   }
 
   const evidenceSection = [
@@ -164,21 +294,26 @@ export function buildSynthesisPromptWithEvidence(
     '4. **반증 조건**: "X가 발생하면 이 분석은 달라진다"를 명시하시오.',
   ].join('\n');
 
-  return buildSynthesisPrompt(question, debateLog) + evidenceSection;
+  return buildSynthesisPrompt(question, debateLog, roundStates) + evidenceSection;
 }
 
 // --- Plan Mode Prompts ---
 
 export function buildPlanSystemPrompt(
-  provider: ProviderName,
+  participant: DebateParticipant,
   projectContext?: string,
-  participants?: ProviderName[]
+  participants?: DebateParticipant[]
 ): string {
-  const self = providerLabel(provider);
-  const opponent = providerLabel(opponentOf(provider, participants));
+  const self = participant.label;
+  const provider = providerLabel(participant.provider);
+  const otherParticipants = buildOtherParticipantSummary(participant, participants);
+  const rolePrompt = buildParticipantRolePrompt(participant.role);
 
   const lines = [
-    `You are ${self}, participating in an implementation planning discussion with ${opponent}.`,
+    `You are ${self}, participating in an implementation planning discussion with ${otherParticipants}.`,
+    `Your underlying model/provider is ${provider}.`,
+    '',
+    rolePrompt,
     '',
     'Your goal is to produce a concrete, actionable implementation plan.',
     '',
@@ -236,25 +371,35 @@ export function buildPlanRebuttalPrompt(
 
 export function buildPlanSynthesisPrompt(
   question: string,
-  debateLog: Array<{ provider: ParticipantName; round: number; content: string }>
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
+  roundStates: DebateRoundState[] = [],
 ): string {
   const transcript = debateLog
     .map(
       (entry) =>
-        `[Round ${entry.round} - ${participantLabel(entry.provider)}]\n${entry.content}`
+        `[Round ${entry.round} - ${participantLabel(entry.label)}]\n${entry.content}`
     )
     .join('\n\n---\n\n');
 
-  const hasUser = debateLog.some((e) => e.provider === 'user');
-  const debateProviders = [...new Set(debateLog.filter(e => e.provider !== 'user').map(e => e.provider))];
+  const hasUser = debateLog.some((e) => e.label === 'user');
+  const debateProviders = [...new Set(debateLog.filter((e) => e.label !== 'user').map((e) => e.label))];
   const providerLabels = debateProviders.map((p) => participantLabel(p as ParticipantName)).join(', ');
   const participants = hasUser ? `${providerLabels}, and the User` : providerLabels;
+  const roundStateSection = roundStates.length > 0
+    ? [
+        'Compressed Discussion State:',
+        '',
+        buildRoundStateSummaryPreamble(roundStates),
+        '',
+      ]
+    : [];
 
   return [
     `You are a technical lead synthesizing an implementation plan from a discussion between ${participants}.`,
     '',
     `Feature Request: "${question}"`,
     '',
+    ...roundStateSection,
     'Discussion Transcript:',
     '',
     transcript,
@@ -362,18 +507,24 @@ export function buildRoundEvidenceSection(
     }
   }
 
+  selected = selected.slice(0, MAX_ROUND_EVIDENCE_ARTICLES);
   if (selected.length === 0) return '';
 
   const lines = [
     '',
     `## 참고 뉴스 (${label})`,
-    '아래 기사를 근거로 활용하여 논증을 강화하십시오.',
+    '아래 압축된 기사 메모를 근거로 활용하여 논증을 강화하십시오.',
     '',
     ...selected.map(
-      (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${a.summary}`
+      (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${truncateText(a.summary, 160)}`
     ),
     '',
   ];
+
+  if (articles.length > selected.length) {
+    lines.push(`추가 기사 ${articles.length - selected.length}건은 컨텍스트 절약을 위해 생략되었습니다.`);
+    lines.push('');
+  }
 
   return lines.join('\n');
 }
@@ -402,4 +553,35 @@ export function getSynthesisPromptBuilder(mode: DebateMode): SynthesisPromptBuil
 
 export function getApplyPromptBuilder(_mode: DebateMode): ApplyPromptBuilder {
   return buildPlanApplyPrompt;
+}
+
+function buildRoundStateSummaryPreamble(roundStates: DebateRoundState[]): string {
+  const lines: string[] = [];
+
+  for (const state of roundStates) {
+    lines.push(`[Round ${state.round}] ${state.summary}`);
+    if (state.keyIssues.length > 0) {
+      lines.push(`Issues: ${state.keyIssues.join(' | ')}`);
+    }
+    if (state.agreements.length > 0) {
+      lines.push(`Agreements: ${state.agreements.join(' | ')}`);
+    }
+    if (state.nextFocus.length > 0) {
+      lines.push(`Next focus: ${state.nextFocus.join(' | ')}`);
+    }
+    if (state.shouldSuggestStop) {
+      lines.push(`Stop suggestion: yes${state.stopReason ? ` (${state.stopReason})` : ''}`);
+    }
+    if (state.warning) {
+      lines.push(`Warning: ${state.warning}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength).trimEnd()}...`;
 }
