@@ -35,13 +35,29 @@ describe('normalizeDebateParticipants', () => {
     expect(participants[1].label).toBe('QA');
   });
 
-  it('역할이 4개 이상이면 오류를 던진다', () => {
+  it('역할이 6개까지는 허용한다', () => {
+    const participants = normalizeDebateParticipants([
+      'codex',
+      'claude',
+      'gemini',
+      'ollama',
+      'codex',
+      'claude',
+    ]);
+
+    expect(participants).toHaveLength(6);
+  });
+
+  it('역할이 7개 이상이면 오류를 던진다', () => {
     expect(() => normalizeDebateParticipants([
       'codex',
       'claude',
       'gemini',
       'ollama',
-    ])).toThrow('2 to 3');
+      'codex',
+      'claude',
+      'gemini',
+    ])).toThrow('2 to 6');
   });
 
   it('동일한 라벨이 들어오면 세션 표시용 라벨을 고유하게 만든다', () => {

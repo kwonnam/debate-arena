@@ -88,8 +88,8 @@ export function normalizeDebateParticipants(
       : normalizeProvidedParticipant(item, index)
   );
 
-  if (participants.length < 2 || participants.length > 3) {
-    throw new Error('Debate participants must contain 2 to 3 entries.');
+  if (participants.length < 2 || participants.length > 6) {
+    throw new Error('Debate participants must contain 2 to 6 entries.');
   }
 
   for (const [index, participant] of participants.entries()) {
