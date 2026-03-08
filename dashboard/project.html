@@ -155,13 +155,47 @@
                 <span>프로젝트 자동 컨텍스트를 끕니다</span>
               </label>
 
-              <div class="field">
-                <label>토론 템플릿</label>
-                <select name="templateId" id="project-template-select"></select>
-                <div class="field-hint" id="project-template-description">역할 템플릿을 불러오는 중입니다.</div>
-              </div>
+              <div class="participant-builder">
+                <div class="participant-builder-header">
+                  <div>
+                    <label>참가자 구성</label>
+                    <p class="field-hint">Template은 기존 역할 묶음을 유지하고, Custom은 2~6명의 역할과 모델을 직접 배치합니다.</p>
+                  </div>
+                  <div class="segment-control" id="project-participant-mode" role="tablist" aria-label="프로젝트 참가자 구성 모드">
+                    <button class="segment-btn is-active" type="button" data-participant-mode="template" aria-pressed="true">Template</button>
+                    <button class="segment-btn" type="button" data-participant-mode="custom" aria-pressed="false">Custom</button>
+                  </div>
+                </div>
 
-              <div class="role-preset-grid" id="project-participant-config"></div>
+                <div class="workflow-mode-panel" id="project-template-panel">
+                  <div class="field">
+                    <label>토론 템플릿</label>
+                    <select name="templateId" id="project-template-select"></select>
+                    <div class="field-hint" id="project-template-description">역할 템플릿을 불러오는 중입니다.</div>
+                  </div>
+
+                  <div class="role-preset-grid" id="project-participant-config"></div>
+                </div>
+
+                <div class="workflow-mode-panel collapsed" id="project-custom-panel">
+                  <div class="participant-toolbar">
+                    <div class="field participant-count-field">
+                      <label>참가자 수</label>
+                      <select id="project-custom-count">
+                        <option value="2">2명</option>
+                        <option value="3">3명</option>
+                        <option value="4">4명</option>
+                        <option value="5">5명</option>
+                        <option value="6">6명</option>
+                      </select>
+                    </div>
+                    <p class="field-hint">같은 역할을 다른 모델에 중복 배치하거나, 같은 모델을 여러 슬롯에 반복 배치할 수 있습니다.</p>
+                  </div>
+
+                  <div class="role-preset-grid" id="project-custom-participant-config"></div>
+                  <div class="participant-summary-card" id="project-custom-summary">역할과 모델을 선택하면 구성이 여기에 요약됩니다.</div>
+                </div>
+              </div>
 
               <div class="field">
                 <label>Judge</label>
@@ -171,7 +205,7 @@
                   <option value="gemini">gemini</option>
                   <option value="both">both</option>
                 </select>
-                <small class="field-hint">참가자는 2~3명까지만 지원하며, 같은 모델을 다른 역할로 반복 선택할 수 있습니다.</small>
+                <small class="field-hint">Template preset은 유지되고, Custom 구성에서는 2~6명까지 직접 편성할 수 있습니다.</small>
               </div>
 
               <div class="execute-actions">

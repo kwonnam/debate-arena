@@ -733,7 +733,7 @@ function parseParticipants(input: unknown): DebateParticipant[] | undefined {
   if (!Array.isArray(input)) {
     return undefined;
   }
-  if (input.length < 2 || input.length > 3) {
+  if (input.length < 2 || input.length > 6) {
     return undefined;
   }
 

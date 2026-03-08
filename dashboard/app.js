@@ -25,9 +25,15 @@ const projectExecutionCwdInput = document.getElementById('project-execution-cwd'
 const projectRuntimeHint = document.getElementById('project-runtime-hint');
 const projectAdvancedToggle = document.getElementById('project-advanced-toggle');
 const projectAdvancedFields = document.getElementById('project-advanced-fields');
+const projectParticipantMode = document.getElementById('project-participant-mode');
+const projectTemplatePanel = document.getElementById('project-template-panel');
+const projectCustomPanel = document.getElementById('project-custom-panel');
+const projectCustomCount = document.getElementById('project-custom-count');
 const projectTemplateSelect = document.getElementById('project-template-select');
 const projectTemplateSummary = document.getElementById('project-template-description');
 const projectRoleSlots = document.getElementById('project-participant-config');
+const projectCustomRoleSlots = document.getElementById('project-custom-participant-config');
+const projectCustomSummary = document.getElementById('project-custom-summary');
 const projectJudgeSelect = projectForm?.querySelector('select[name="judge"]');
 
 const newsForm = document.getElementById('news-form');
@@ -42,9 +48,15 @@ const newsExecutionCwdInput = document.getElementById('news-execution-cwd');
 const newsOllamaModelGroup = document.getElementById('news-ollama-model-group');
 const newsOllamaModelSelect = document.getElementById('news-ollama-model');
 const debateSnapshotInput = document.getElementById('debate-snapshot-id');
+const newsParticipantMode = document.getElementById('news-participant-mode');
+const newsTemplatePanel = document.getElementById('news-template-panel');
+const newsCustomPanel = document.getElementById('news-custom-panel');
+const newsCustomCount = document.getElementById('news-custom-count');
 const newsTemplateSelect = document.getElementById('news-template-select');
 const newsTemplateSummary = document.getElementById('news-template-description');
 const newsRoleSlots = document.getElementById('news-participant-config');
+const newsCustomRoleSlots = document.getElementById('news-custom-participant-config');
+const newsCustomSummary = document.getElementById('news-custom-summary');
 const newsJudgeSelect = newsForm?.querySelector('select[name="judge"]');
 
 const roleConfigPath = document.getElementById('role-config-path');
@@ -98,6 +110,10 @@ let workflowRoleAssignments = {
   project: {},
   news: {},
 };
+let workflowParticipantComposer = {
+  project: { mode: 'template', customParticipants: [] },
+  news: { mode: 'template', customParticipants: [] },
+};
 let currentParticipants = [
   createFallbackParticipant('codex', 'codex-default', 'Codex'),
   createFallbackParticipant('claude', 'claude-default', 'Claude'),
@@ -114,6 +130,10 @@ let stalledTimer = null;
 const MAX_FILES = 6;
 const MAX_TEXT_FILE_CHARS = 12_000;
 const MAX_IMAGE_DATA_URL_CHARS = 180_000;
+const MIN_PARTICIPANTS = 2;
+const MAX_PARTICIPANTS = 6;
+const CUSTOM_ROLE_VALUE = '__custom__';
+const PARTICIPANT_SIDE_SEQUENCE = ['a', 'b', 'c'];
 
 function createFallbackParticipant(provider, id, label) {
   return {
@@ -134,18 +154,30 @@ function getWorkflowControls(workflow) {
   if (workflow === 'news') {
     return {
       form: newsForm,
+      participantMode: newsParticipantMode,
+      templatePanel: newsTemplatePanel,
+      customPanel: newsCustomPanel,
+      customCountSelect: newsCustomCount,
       templateSelect: newsTemplateSelect,
       templateSummary: newsTemplateSummary,
       roleSlots: newsRoleSlots,
+      customRoleSlots: newsCustomRoleSlots,
+      customSummary: newsCustomSummary,
       judgeSelect: newsJudgeSelect,
     };
   }
 
   return {
     form: projectForm,
+    participantMode: projectParticipantMode,
+    templatePanel: projectTemplatePanel,
+    customPanel: projectCustomPanel,
+    customCountSelect: projectCustomCount,
     templateSelect: projectTemplateSelect,
     templateSummary: projectTemplateSummary,
     roleSlots: projectRoleSlots,
+    customRoleSlots: projectCustomRoleSlots,
+    customSummary: projectCustomSummary,
     judgeSelect: projectJudgeSelect,
   };
 }
@@ -158,6 +190,38 @@ function getSelectedTemplate(workflow) {
   const controls = getWorkflowControls(workflow);
   const selectedId = controls.templateSelect?.value || getDefaultTemplateId(workflow);
   return getWorkflowTemplates(workflow).find((template) => template.id === selectedId) || getWorkflowTemplates(workflow)[0] || null;
+}
+
+function slugifyValue(value) {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+function clampParticipantCount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return MIN_PARTICIPANTS;
+  }
+  return Math.min(MAX_PARTICIPANTS, Math.max(MIN_PARTICIPANTS, Math.trunc(numeric)));
+}
+
+function getWorkflowComposerState(workflow) {
+  return workflowParticipantComposer[workflow] || { mode: 'template', customParticipants: [] };
+}
+
+function getWorkflowMode(workflow) {
+  return getWorkflowComposerState(workflow).mode === 'custom' ? 'custom' : 'template';
+}
+
+function setWorkflowMode(workflow, mode) {
+  if (!workflowParticipantComposer[workflow]) {
+    workflowParticipantComposer[workflow] = { mode: 'template', customParticipants: [] };
+  }
+  workflowParticipantComposer[workflow].mode = mode === 'custom' ? 'custom' : 'template';
 }
 
 function setConnState(state) {
@@ -444,20 +508,19 @@ function getParticipantSide(participantId, provider = '') {
       || participant.provider.toLowerCase() === String(provider || '').toLowerCase();
   });
 
-  if (index === 1) return 'b';
-  if (index === 2) return 'c';
-  return 'a';
+  if (index < 0) return PARTICIPANT_SIDE_SEQUENCE[0];
+  return PARTICIPANT_SIDE_SEQUENCE[index % PARTICIPANT_SIDE_SEQUENCE.length];
 }
 
 function renderParticipantLanes() {
   if (!participantLanes) return;
 
   participantLanes.dataset.count = String(currentParticipants.length || 0);
-  participantLanes.className = `participant-lanes participant-lanes-dynamic participant-lanes-${Math.min(3, Math.max(2, currentParticipants.length || 2))}`;
+  participantLanes.className = 'participant-lanes participant-lanes-dynamic';
   participantLanes.innerHTML = currentParticipants
     .map((participant, index) => {
       const laneClass = getParticipantSide(participant.id, participant.provider);
-      const slotLabel = index === 0 ? 'Participant 1' : index === 1 ? 'Participant 2' : 'Participant 3';
+      const slotLabel = `Participant ${index + 1}`;
       const roleLabel = participant.role?.roleLabel || participant.label;
       return `
         <div class="lane-card ${laneClass}">
@@ -739,6 +802,195 @@ function getWorkflowTemplates(workflow) {
   return Array.isArray(templates) ? templates : [];
 }
 
+function getWorkflowRoleCatalog(workflow) {
+  const catalog = [];
+  const seen = new Set();
+
+  for (const template of getWorkflowTemplates(workflow)) {
+    for (const role of template.participants || []) {
+      const roleId = String(role.roleId || '').trim();
+      if (!roleId || seen.has(roleId)) {
+        continue;
+      }
+
+      seen.add(roleId);
+      catalog.push({
+        roleId,
+        label: String(role.label || role.roleLabel || roleId).trim() || roleId,
+        focus: String(role.focus || '').trim(),
+        instructions: Array.isArray(role.instructions) ? role.instructions.map((item) => String(item).trim()).filter(Boolean) : [],
+        requiredQuestions: Array.isArray(role.requiredQuestions)
+          ? role.requiredQuestions.map((item) => String(item).trim()).filter(Boolean)
+          : [],
+        defaultProvider: String(role.defaultProvider || '').trim(),
+      });
+    }
+  }
+
+  catalog.push({
+    roleId: CUSTOM_ROLE_VALUE,
+    label: '직접 입력',
+    focus: '',
+    instructions: [],
+    requiredQuestions: [],
+    defaultProvider: '',
+  });
+
+  return catalog;
+}
+
+function getWorkflowRoleDefinition(workflow, roleId) {
+  return getWorkflowRoleCatalog(workflow).find((role) => role.roleId === roleId) || null;
+}
+
+function getPreferredWorkflowProvider(workflow, ...preferredValues) {
+  const providerOptions = getWorkflowProviderOptions(workflow);
+  for (const preferredValue of preferredValues) {
+    if (providerOptions.some((option) => option.value === preferredValue && !option.disabled)) {
+      return preferredValue;
+    }
+  }
+
+  return providerOptions.find((option) => !option.disabled)?.value || '';
+}
+
+function createCustomParticipantDraft(workflow, index, overrides = {}) {
+  const catalog = getWorkflowRoleCatalog(workflow);
+  const templateRole = getSelectedTemplate(workflow)?.participants?.[index];
+  const preferredRoleId = String(overrides.roleId || templateRole?.roleId || '').trim();
+  const hasPreferredRole = catalog.some((role) => role.roleId === preferredRoleId);
+  const defaultRole = catalog.find((role) => role.roleId !== CUSTOM_ROLE_VALUE) || catalog[0] || null;
+  const roleId = overrides.customLabel
+    ? CUSTOM_ROLE_VALUE
+    : hasPreferredRole
+      ? preferredRoleId
+      : defaultRole?.roleId || CUSTOM_ROLE_VALUE;
+  const roleDefinition = getWorkflowRoleDefinition(workflow, roleId);
+
+  return {
+    roleId,
+    customLabel: String(overrides.customLabel || '').trim(),
+    provider: getPreferredWorkflowProvider(
+      workflow,
+      overrides.provider,
+      workflowRoleAssignments[workflow]?.[templateRole?.roleId],
+      roleDefinition?.defaultProvider,
+      templateRole?.defaultProvider,
+    ),
+  };
+}
+
+function seedCustomParticipantsFromTemplate(workflow) {
+  const template = getSelectedTemplate(workflow);
+  const templateRoles = template?.participants || [];
+  const desiredCount = clampParticipantCount(templateRoles.length || MIN_PARTICIPANTS);
+  const customParticipants = [];
+
+  for (let index = 0; index < desiredCount; index += 1) {
+    const templateRole = templateRoles[index];
+    customParticipants.push(createCustomParticipantDraft(workflow, index, {
+      roleId: templateRole?.roleId,
+      provider: workflowRoleAssignments[workflow]?.[templateRole?.roleId] || templateRole?.defaultProvider || '',
+    }));
+  }
+
+  workflowParticipantComposer[workflow] = {
+    ...getWorkflowComposerState(workflow),
+    customParticipants,
+  };
+}
+
+function ensureWorkflowCustomParticipants(workflow) {
+  const state = getWorkflowComposerState(workflow);
+  if (!Array.isArray(state.customParticipants) || state.customParticipants.length === 0) {
+    seedCustomParticipantsFromTemplate(workflow);
+  }
+
+  const nextParticipants = [];
+  const targetCount = clampParticipantCount(getWorkflowComposerState(workflow).customParticipants.length || MIN_PARTICIPANTS);
+  const current = getWorkflowComposerState(workflow).customParticipants || [];
+
+  for (let index = 0; index < targetCount; index += 1) {
+    nextParticipants.push(createCustomParticipantDraft(workflow, index, current[index]));
+  }
+
+  workflowParticipantComposer[workflow] = {
+    ...getWorkflowComposerState(workflow),
+    customParticipants: nextParticipants,
+  };
+}
+
+function setWorkflowCustomParticipantCount(workflow, value) {
+  ensureWorkflowCustomParticipants(workflow);
+  const targetCount = clampParticipantCount(value);
+  const current = getWorkflowComposerState(workflow).customParticipants || [];
+  const nextParticipants = [];
+
+  for (let index = 0; index < targetCount; index += 1) {
+    nextParticipants.push(createCustomParticipantDraft(workflow, index, current[index]));
+  }
+
+  workflowParticipantComposer[workflow] = {
+    ...getWorkflowComposerState(workflow),
+    customParticipants: nextParticipants,
+  };
+}
+
+function getWorkflowParticipantDraftRoleLabel(workflow, draft, index) {
+  if (!draft) {
+    return '';
+  }
+
+  if (draft.roleId === CUSTOM_ROLE_VALUE) {
+    return String(draft.customLabel || '').trim();
+  }
+
+  return getWorkflowRoleDefinition(workflow, draft.roleId)?.label || `Participant ${index + 1}`;
+}
+
+function buildWorkflowCustomParticipantPreview(workflow, draft, index) {
+  const provider = String(draft?.provider || '').trim();
+  const roleLabel = getWorkflowParticipantDraftRoleLabel(workflow, draft, index);
+  if (!provider || !roleLabel) {
+    return null;
+  }
+
+  return {
+    roleLabel,
+    provider,
+  };
+}
+
+function summarizeRoleCounts(previews) {
+  const grouped = new Map();
+  for (const preview of previews) {
+    grouped.set(preview.roleLabel, (grouped.get(preview.roleLabel) || 0) + 1);
+  }
+
+  return [...grouped.entries()]
+    .map(([roleLabel, count]) => (count > 1 ? `${roleLabel} ${count}명` : `${roleLabel} 1명`))
+    .join(' · ');
+}
+
+function summarizeRoleAssignments(previews) {
+  const grouped = new Map();
+
+  for (const preview of previews) {
+    const key = `${preview.roleLabel}::${preview.provider}`;
+    grouped.set(key, {
+      roleLabel: preview.roleLabel,
+      provider: preview.provider,
+      count: (grouped.get(key)?.count || 0) + 1,
+    });
+  }
+
+  return [...grouped.values()]
+    .map((item) => (item.count > 1
+      ? `${item.roleLabel}: ${item.provider} ${item.count}명`
+      : `${item.roleLabel}: ${item.provider}`))
+    .join(' · ');
+}
+
 function renderWorkflowTemplateOptions(workflow) {
   const controls = getWorkflowControls(workflow);
   if (!controls.templateSelect) return;
@@ -859,11 +1111,208 @@ function renderWorkflowRoleSlots(workflow) {
   });
 }
 
+function renderWorkflowCustomSummary(workflow) {
+  const controls = getWorkflowControls(workflow);
+  if (!controls.customSummary) return;
+
+  ensureWorkflowCustomParticipants(workflow);
+  const previews = (getWorkflowComposerState(workflow).customParticipants || [])
+    .map((draft, index) => buildWorkflowCustomParticipantPreview(workflow, draft, index))
+    .filter(Boolean);
+
+  if (previews.length === 0) {
+    controls.customSummary.innerHTML = '역할과 모델을 선택하면 구성이 여기에 요약됩니다.';
+    return;
+  }
+
+  controls.customSummary.innerHTML = `
+    <strong>현재 custom 구성</strong>
+    <div class="participant-summary-grid">
+      <div class="participant-summary-row">
+        <span>역할 묶음</span>
+        <p>${escapeHtml(summarizeRoleCounts(previews))}</p>
+      </div>
+      <div class="participant-summary-row">
+        <span>모델 배치</span>
+        <p>${escapeHtml(summarizeRoleAssignments(previews))}</p>
+      </div>
+    </div>
+  `;
+}
+
+function renderWorkflowCustomParticipants(workflow) {
+  const controls = getWorkflowControls(workflow);
+  if (!controls.customRoleSlots) return;
+
+  ensureWorkflowCustomParticipants(workflow);
+  const state = getWorkflowComposerState(workflow);
+  const providerOptions = getWorkflowProviderOptions(workflow);
+  const roleCatalog = getWorkflowRoleCatalog(workflow);
+
+  if (controls.customCountSelect) {
+    controls.customCountSelect.value = String(clampParticipantCount(state.customParticipants.length || MIN_PARTICIPANTS));
+  }
+
+  controls.customRoleSlots.innerHTML = (state.customParticipants || [])
+    .map((draft, index) => {
+      const roleDefinition = getWorkflowRoleDefinition(workflow, draft.roleId);
+      const roleOptions = roleCatalog
+        .map((role) => {
+          const selected = role.roleId === draft.roleId ? 'selected' : '';
+          return `<option value="${escapeHtml(role.roleId)}" ${selected}>${escapeHtml(role.label)}</option>`;
+        })
+        .join('');
+      const providerMarkup = providerOptions
+        .map((option) => {
+          const selected = option.value === draft.provider ? 'selected' : '';
+          const disabled = option.disabled ? 'disabled' : '';
+          return `<option value="${escapeHtml(option.value)}" ${selected} ${disabled}>${escapeHtml(option.label)}</option>`;
+        })
+        .join('');
+      const roleLabel = getWorkflowParticipantDraftRoleLabel(workflow, draft, index);
+      const focus = draft.roleId === CUSTOM_ROLE_VALUE
+        ? roleLabel
+          ? `${roleLabel} 관점에서 질문에 답합니다.`
+          : '역할명을 직접 입력하면 그 관점으로 토론에 참여합니다.'
+        : roleDefinition?.focus || '';
+      const instructions = draft.roleId === CUSTOM_ROLE_VALUE ? [] : roleDefinition?.instructions || [];
+      const requiredQuestions = draft.roleId === CUSTOM_ROLE_VALUE ? [] : roleDefinition?.requiredQuestions || [];
+      const customRoleField = draft.roleId === CUSTOM_ROLE_VALUE
+        ? `
+          <label class="field">
+            <span>직접 입력 역할명</span>
+            <input
+              type="text"
+              data-custom-role-label="${escapeHtml(index)}"
+              placeholder="예: 경제 전문가"
+              value="${escapeHtml(draft.customLabel || '')}"
+            />
+          </label>
+        `
+        : '';
+
+      return `
+        <article class="role-slot-card custom-role-slot" data-custom-slot="${escapeHtml(index)}">
+          <div class="role-slot-head">
+            <span class="step-badge muted">Participant ${index + 1}</span>
+            <strong>${escapeHtml(roleLabel || '역할을 선택하세요')}</strong>
+          </div>
+          <div class="inline-fields participant-slot-grid">
+            <label class="field">
+              <span>역할</span>
+              <select data-custom-role="${escapeHtml(index)}">${roleOptions}</select>
+            </label>
+            <label class="field">
+              <span>모델</span>
+              <select data-custom-provider="${escapeHtml(index)}">${providerMarkup}</select>
+            </label>
+          </div>
+          ${customRoleField}
+          <p class="role-slot-focus">${escapeHtml(focus || '역할별 관점이 여기에 표시됩니다.')}</p>
+          ${instructions.length > 0
+            ? `<ul class="role-slot-list">${instructions.map((instruction) => `<li>${escapeHtml(instruction)}</li>`).join('')}</ul>`
+            : '<p class="session-meta">추가 역할 지시는 없습니다.</p>'}
+          ${requiredQuestions.length > 0
+            ? `<p class="session-meta">${escapeHtml(requiredQuestions.join(' / '))}</p>`
+            : ''}
+        </article>
+      `;
+    })
+    .join('');
+
+  controls.customRoleSlots.querySelectorAll('select[data-custom-role]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      const index = Number(select.getAttribute('data-custom-role'));
+      if (!Number.isFinite(index)) return;
+      const current = getWorkflowComposerState(workflow).customParticipants || [];
+      const nextDraft = createCustomParticipantDraft(workflow, index, {
+        ...current[index],
+        roleId: select.value,
+        customLabel: select.value === CUSTOM_ROLE_VALUE ? current[index]?.customLabel || '' : '',
+      });
+      current[index] = nextDraft;
+      workflowParticipantComposer[workflow] = {
+        ...getWorkflowComposerState(workflow),
+        customParticipants: [...current],
+      };
+      renderWorkflowCustomParticipants(workflow);
+      if (workflow === 'news') {
+        await syncNewsOllamaModelField();
+      }
+    });
+  });
+
+  controls.customRoleSlots.querySelectorAll('select[data-custom-provider]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      const index = Number(select.getAttribute('data-custom-provider'));
+      if (!Number.isFinite(index)) return;
+      const current = getWorkflowComposerState(workflow).customParticipants || [];
+      current[index] = createCustomParticipantDraft(workflow, index, {
+        ...current[index],
+        provider: select.value,
+      });
+      workflowParticipantComposer[workflow] = {
+        ...getWorkflowComposerState(workflow),
+        customParticipants: [...current],
+      };
+      renderWorkflowCustomSummary(workflow);
+      if (workflow === 'news') {
+        await syncNewsOllamaModelField();
+      }
+    });
+  });
+
+  controls.customRoleSlots.querySelectorAll('input[data-custom-role-label]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const index = Number(input.getAttribute('data-custom-role-label'));
+      if (!Number.isFinite(index)) return;
+      const current = getWorkflowComposerState(workflow).customParticipants || [];
+      current[index] = createCustomParticipantDraft(workflow, index, {
+        ...current[index],
+        roleId: CUSTOM_ROLE_VALUE,
+        customLabel: input.value,
+      });
+      workflowParticipantComposer[workflow] = {
+        ...getWorkflowComposerState(workflow),
+        customParticipants: [...current],
+      };
+      const card = input.closest('[data-custom-slot]');
+      const nextLabel = getWorkflowParticipantDraftRoleLabel(workflow, current[index], index) || '역할을 선택하세요';
+      const title = card?.querySelector('.role-slot-head strong');
+      const focus = card?.querySelector('.role-slot-focus');
+      if (title) {
+        title.textContent = nextLabel;
+      }
+      if (focus) {
+        focus.textContent = nextLabel
+          ? `${nextLabel} 관점에서 질문에 답합니다.`
+          : '역할명을 직접 입력하면 그 관점으로 토론에 참여합니다.';
+      }
+      renderWorkflowCustomSummary(workflow);
+    });
+  });
+
+  renderWorkflowCustomSummary(workflow);
+}
+
+function renderWorkflowComposer(workflow) {
+  const controls = getWorkflowControls(workflow);
+  const mode = getWorkflowMode(workflow);
+  controls.templatePanel?.classList.toggle('collapsed', mode !== 'template');
+  controls.customPanel?.classList.toggle('collapsed', mode !== 'custom');
+
+  controls.participantMode?.querySelectorAll('[data-participant-mode]').forEach((button) => {
+    const isActive = button.getAttribute('data-participant-mode') === mode;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
+  });
+}
+
 function renderWorkflowTemplateEditor(workflow) {
   renderWorkflowTemplateOptions(workflow);
   const template = getSelectedTemplate(workflow);
   const controls = getWorkflowControls(workflow);
-  if (template?.recommendedJudge && controls.judgeSelect) {
+  if (template?.recommendedJudge && controls.judgeSelect && getWorkflowMode(workflow) === 'template') {
     const judgeOptions = getWorkflowJudgeOptions(workflow);
     if (judgeOptions.some((option) => option.value === template.recommendedJudge && !option.disabled)) {
       controls.judgeSelect.value = template.recommendedJudge;
@@ -871,6 +1320,8 @@ function renderWorkflowTemplateEditor(workflow) {
   }
   renderWorkflowTemplateSummary(workflow);
   renderWorkflowRoleSlots(workflow);
+  renderWorkflowCustomParticipants(workflow);
+  renderWorkflowComposer(workflow);
 }
 
 function renderAllWorkflowTemplateEditors() {
@@ -879,7 +1330,7 @@ function renderAllWorkflowTemplateEditors() {
   });
 }
 
-function buildParticipantsFromWorkflow(workflow) {
+function buildParticipantsFromTemplateWorkflow(workflow) {
   const template = getSelectedTemplate(workflow);
   if (!template) {
     return [];
@@ -901,6 +1352,69 @@ function buildParticipantsFromWorkflow(workflow) {
       },
     };
   }).filter((participant) => participant.provider);
+}
+
+function buildParticipantsFromCustomWorkflow(workflow) {
+  ensureWorkflowCustomParticipants(workflow);
+
+  return (getWorkflowComposerState(workflow).customParticipants || [])
+    .map((draft, index) => {
+      const roleDefinition = getWorkflowRoleDefinition(workflow, draft.roleId);
+      const roleLabel = getWorkflowParticipantDraftRoleLabel(workflow, draft, index);
+      if (!draft.provider || !roleLabel) {
+        return null;
+      }
+
+      const baseRoleId = draft.roleId === CUSTOM_ROLE_VALUE
+        ? slugifyValue(roleLabel) || `custom-role-${index + 1}`
+        : roleDefinition?.roleId || `participant-${index + 1}`;
+
+      return {
+        id: `${workflow}-custom-${index + 1}-${slugifyValue(roleLabel) || 'participant'}`,
+        provider: draft.provider,
+        label: roleLabel,
+        role: {
+          roleId: `${baseRoleId}-${index + 1}`,
+          roleLabel,
+          focus: roleDefinition?.focus || `${roleLabel} 관점에서 질문에 답합니다.`,
+          instructions: Array.isArray(roleDefinition?.instructions) ? roleDefinition.instructions : [],
+          requiredQuestions: Array.isArray(roleDefinition?.requiredQuestions) ? roleDefinition.requiredQuestions : [],
+        },
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildParticipantsFromWorkflow(workflow) {
+  if (getWorkflowMode(workflow) === 'custom') {
+    return buildParticipantsFromCustomWorkflow(workflow);
+  }
+
+  return buildParticipantsFromTemplateWorkflow(workflow);
+}
+
+function resolveWorkflowParticipants(workflow) {
+  if (getWorkflowMode(workflow) === 'custom') {
+    ensureWorkflowCustomParticipants(workflow);
+    const drafts = getWorkflowComposerState(workflow).customParticipants || [];
+
+    for (const [index, draft] of drafts.entries()) {
+      if (!String(draft.provider || '').trim()) {
+        return { ok: false, error: `${index + 1}번 참가자의 모델을 선택하세요.` };
+      }
+
+      if (!getWorkflowParticipantDraftRoleLabel(workflow, draft, index)) {
+        return { ok: false, error: `${index + 1}번 참가자의 역할을 선택하거나 직접 입력하세요.` };
+      }
+    }
+  }
+
+  const participants = buildParticipantsFromWorkflow(workflow);
+  if (participants.length < MIN_PARTICIPANTS || participants.length > MAX_PARTICIPANTS) {
+    return { ok: false, error: `${workflow === 'news' ? '뉴스' : '프로젝트'} 토론 참가자는 2명에서 6명 사이여야 합니다.` };
+  }
+
+  return { ok: true, participants };
 }
 
 async function refreshRoleTemplates() {
@@ -1696,8 +2210,19 @@ function setSelectOptions(select, options, preferredValue) {
   }
 }
 
+function getConfiguredWorkflowProviders(workflow) {
+  if (getWorkflowMode(workflow) === 'custom') {
+    ensureWorkflowCustomParticipants(workflow);
+    return (getWorkflowComposerState(workflow).customParticipants || [])
+      .map((draft) => String(draft.provider || '').trim())
+      .filter(Boolean);
+  }
+
+  return Object.values(workflowRoleAssignments[workflow] || {}).filter(Boolean);
+}
+
 function shouldShowNewsOllamaModel() {
-  const roleValues = Object.values(workflowRoleAssignments.news || {});
+  const roleValues = getConfiguredWorkflowProviders('news');
   return [...roleValues, newsJudgeSelect?.value].includes('ollama');
 }
 
@@ -2061,18 +2586,19 @@ if (projectForm) {
 
     const formData = new FormData(projectForm);
     const question = String(formData.get('question') || '').trim();
-    const participants = buildParticipantsFromWorkflow('project');
+    const participantResult = resolveWorkflowParticipants('project');
 
     if (!question) {
       executeStatus.textContent = '개선 질문을 먼저 입력하세요.';
       return;
     }
 
-    if (participants.length < 2 || participants.length > 3) {
-      executeStatus.textContent = '프로젝트 토론 참가자는 2명 또는 3명이어야 합니다.';
+    if (!participantResult.ok) {
+      executeStatus.textContent = participantResult.error;
       return;
     }
 
+    const participants = participantResult.participants;
     currentParticipants = normalizeParticipants(participants);
     renderParticipantLanes();
 
@@ -2134,12 +2660,13 @@ if (newsForm) {
       }
     }
 
-    const participants = buildParticipantsFromWorkflow('news');
-    if (participants.length < 2 || participants.length > 3) {
-      executeStatus.textContent = '뉴스 토론 참가자는 2명 또는 3명이어야 합니다.';
+    const participantResult = resolveWorkflowParticipants('news');
+    if (!participantResult.ok) {
+      executeStatus.textContent = participantResult.error;
       return;
     }
 
+    const participants = participantResult.participants;
     currentParticipants = normalizeParticipants(participants);
     renderParticipantLanes();
 
@@ -2297,6 +2824,39 @@ bindAdvancedToggle(newsAdvancedToggle, newsAdvancedFields);
 ].forEach(([workflow, control]) => {
   control?.addEventListener('change', async () => {
     renderWorkflowTemplateEditor(workflow);
+    if (workflow === 'news') {
+      await syncNewsOllamaModelField();
+    }
+  });
+});
+
+['project', 'news'].forEach((workflow) => {
+  const controls = getWorkflowControls(workflow);
+
+  controls.participantMode?.querySelectorAll('[data-participant-mode]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const nextMode = button.getAttribute('data-participant-mode') === 'custom' ? 'custom' : 'template';
+      const currentMode = getWorkflowMode(workflow);
+      if (nextMode === currentMode) {
+        return;
+      }
+
+      if (nextMode === 'custom' && (getWorkflowComposerState(workflow).customParticipants || []).length === 0) {
+        seedCustomParticipantsFromTemplate(workflow);
+      }
+
+      setWorkflowMode(workflow, nextMode);
+      renderWorkflowTemplateEditor(workflow);
+      if (workflow === 'news') {
+        await syncNewsOllamaModelField();
+      }
+    });
+  });
+
+  controls.customCountSelect?.addEventListener('change', async () => {
+    setWorkflowCustomParticipantCount(workflow, controls.customCountSelect.value);
+    renderWorkflowCustomParticipants(workflow);
+    renderWorkflowComposer(workflow);
     if (workflow === 'news') {
       await syncNewsOllamaModelField();
     }

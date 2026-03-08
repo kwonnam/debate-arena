@@ -700,6 +700,108 @@ textarea:focus {
   display: none;
 }
 
+.participant-builder,
+.workflow-mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.workflow-mode-panel.collapsed {
+  display: none;
+}
+
+.participant-builder-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.participant-builder-header label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.segment-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.segment-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.segment-btn.is-active {
+  background: rgba(240, 253, 250, 0.92);
+  color: var(--accent-ink);
+  box-shadow: 0 8px 18px rgba(15, 118, 110, 0.12);
+}
+
+.participant-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.participant-count-field {
+  min-width: 140px;
+}
+
+.participant-slot-grid {
+  align-items: flex-start;
+}
+
+.participant-summary-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.participant-summary-card strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.participant-summary-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.participant-summary-row span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.participant-summary-row p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
 .execute-actions {
   display: flex;
   justify-content: flex-end;
@@ -1071,14 +1173,9 @@ textarea:focus {
 
 .participant-lanes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
-}
-
-.participant-lanes[data-count='3'],
-.participant-lanes.participant-lanes-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .participant-lanes.participant-lanes-dynamic {
