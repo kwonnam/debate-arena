@@ -121,6 +121,35 @@ workflows:
             defaultProvider: claude
             instructions:
               - 파일 경계와 책임 분리를 기준으로 판단한다.
+      - id: project-product-discovery
+        label: 제품 전략 · 사용자 문제 · MVP
+        description: 새로운 기획을 발상하거나 다듬을 때 문제 정의, 가치 제안, 초기 실행 범위를 함께 검토하는 3자 토론 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: product-strategist
+            label: 제품 전략가
+            focus: 어떤 문제를 어떤 사용자에게 어떤 가치로 풀지 선명하게 정의합니다.
+            defaultProvider: codex
+            instructions:
+              - 아이디어보다 사용자 문제와 차별점을 먼저 정리한다.
+              - 버려야 할 범위와 집중할 핵심을 분리한다.
+            requiredQuestions:
+              - 이 아이디어가 해결하는 가장 중요한 문제는 무엇인가?
+              - 지금 만들지 않아도 되는 기능은 무엇인가?
+          - roleId: user-researcher
+            label: 사용자 리서처
+            focus: 대상 사용자, 사용 맥락, 초기 반응을 검증할 질문을 설계합니다.
+            defaultProvider: claude
+            instructions:
+              - 사용자 세그먼트와 행동 변화를 구체적으로 묘사한다.
+              - 가설과 확인해야 할 질문을 나눠 제시한다.
+          - roleId: mvp-designer
+            label: MVP 설계자
+            focus: 가장 작은 출시 범위, 검증 실험, 구현 우선순위를 정리합니다.
+            defaultProvider: gemini
+            instructions:
+              - 첫 릴리스와 이후 확장을 분리한다.
+              - 빠르게 검증할 실험과 성공 기준을 함께 제안한다.
 `;
 
 function ensureConfigDir(): void {

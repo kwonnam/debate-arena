@@ -20,7 +20,7 @@
       <div class="header-actions header-actions-column">
         <nav class="page-switcher" aria-label="워크벤치 이동">
           <a class="page-link" href="/">허브</a>
-          <a class="page-link" href="/project.html">프로젝트 개선</a>
+          <a class="page-link" href="/project.html">프로젝트·기획</a>
           <a class="page-link is-active" href="/news.html">근거 기반 토론</a>
           <a class="page-link" href="/settings.html">설정</a>
         </nav>
@@ -65,7 +65,7 @@
       <div class="runtime-actions">
         <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
         <button class="button subtle runtime-btn" type="button" id="resume-session">멈춘 지점부터 재시작</button>
-        <button class="button subtle runtime-btn" type="button" id="continue-session">결과 기반 후속 토론</button>
+        <button class="button subtle runtime-btn" type="button" id="continue-session">결론에서 새 주제</button>
         <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
         <label class="runtime-label">
           Replay from
@@ -405,6 +405,30 @@
         <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
           <span class="synthesis-hero-label">Synthesis</span>
           <div id="synthesis"></div>
+          <div class="follow-up-composer" id="follow-up-composer" style="display:none">
+            <div class="follow-up-composer-head">
+              <div>
+                <h3>새 주제로 후속 토의</h3>
+                <p>현재 결론을 배경으로 새 주제를 추가해 다음 토의를 바로 시작합니다.</p>
+              </div>
+              <span class="meta-badge">Follow-up</span>
+            </div>
+            <div class="field">
+              <label for="follow-up-topic">추가할 새 주제</label>
+              <textarea
+                id="follow-up-topic"
+                rows="3"
+                placeholder="예: 이 결론이 다음 분기 제품 전략이나 시장 대응에 어떤 추가 검토를 요구하는가?"
+              ></textarea>
+            </div>
+            <div class="follow-up-suggestions" id="follow-up-suggestions" style="display:none"></div>
+            <p class="field-hint follow-up-status" id="follow-up-status">
+              결론에서 파생된 새 주제를 입력하면 이전 합의와 쟁점을 이어받아 후속 토의를 시작합니다.
+            </p>
+            <div class="execute-actions follow-up-actions">
+              <button class="button" type="button" id="follow-up-start">새 토의 시작</button>
+            </div>
+          </div>
         </section>
       </main>
     </div>

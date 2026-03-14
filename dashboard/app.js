@@ -3,6 +3,11 @@ const streamBox = document.getElementById('stream');
 const timelineBox = document.getElementById('timeline');
 const synthesisBox = document.getElementById('synthesis');
 const synthesisSection = document.getElementById('synthesis-section');
+const followUpComposer = document.getElementById('follow-up-composer');
+const followUpTopicInput = document.getElementById('follow-up-topic');
+const followUpSuggestions = document.getElementById('follow-up-suggestions');
+const followUpStatus = document.getElementById('follow-up-status');
+const followUpStartButton = document.getElementById('follow-up-start');
 const pageWorkflow = document.body.dataset.workflow || 'all';
 const refreshButton = document.getElementById('refresh');
 const replayButton = document.getElementById('replay');
@@ -39,6 +44,13 @@ const projectRoleSlots = document.getElementById('project-participant-config');
 const projectCustomRoleSlots = document.getElementById('project-custom-participant-config');
 const projectCustomSummary = document.getElementById('project-custom-summary');
 const projectJudgeSelect = projectForm?.querySelector('select[name="judge"]');
+const projectIdeaIntentInput = document.getElementById('project-idea-intent');
+const projectIdeaAudienceInput = document.getElementById('project-idea-audience');
+const projectIdeaSeedInput = document.getElementById('project-idea-seed');
+const projectIdeaProblemInput = document.getElementById('project-idea-problem');
+const projectIdeaSuccessMetricInput = document.getElementById('project-idea-success-metric');
+const projectIdeaConstraintsInput = document.getElementById('project-idea-constraints');
+const projectIdeaPreview = document.getElementById('project-idea-preview');
 
 const newsForm = document.getElementById('news-form');
 const newsQuestionInput = newsForm?.querySelector('[name="question"]');
@@ -135,7 +147,10 @@ const snapshotDetailCache = new Map();
 
 let connState = 'idle';
 let stalledTimer = null;
+let followUpRequestInFlight = false;
 
+const SYNTHESIS_PLACEHOLDER = 'Synthesizing...';
+const MAX_FOLLOW_UP_SUGGESTIONS = 6;
 const MAX_FILES = 6;
 const MAX_TEXT_FILE_CHARS = 12_000;
 const MAX_IMAGE_DATA_URL_CHARS = 180_000;
@@ -521,6 +536,102 @@ function shortPath(value) {
   return `...${value.slice(-45)}`;
 }
 
+function getProjectIdeaIntentLabel(intent) {
+  const labels = {
+    propose: '새 아이디어 제안',
+    refine: '아이디어 다듬기',
+    mvp: 'MVP 범위 정리',
+    validation: '가설/리스크 검증',
+  };
+  return labels[intent] || labels.refine;
+}
+
+function collectProjectIdeaStudioValues() {
+  return {
+    intent: String(projectIdeaIntentInput?.value || 'refine').trim() || 'refine',
+    audience: String(projectIdeaAudienceInput?.value || '').trim(),
+    seed: String(projectIdeaSeedInput?.value || '').trim(),
+    problem: String(projectIdeaProblemInput?.value || '').trim(),
+    successMetric: String(projectIdeaSuccessMetricInput?.value || '').trim(),
+    constraints: String(projectIdeaConstraintsInput?.value || '').trim(),
+  };
+}
+
+function hasProjectIdeaStudioContent(values = collectProjectIdeaStudioValues()) {
+  return [values.audience, values.seed, values.problem, values.successMetric, values.constraints].some(Boolean);
+}
+
+function buildProjectIdeaQuestion(values = collectProjectIdeaStudioValues()) {
+  const starter = values.seed
+    ? `현재 아이디어 "${values.seed}"`
+    : '아래 아이디어 브리프';
+  const templates = {
+    propose: `${starter}를 바탕으로 새로운 제품 또는 기능 아이디어를 2~3개 제안하고, 가장 유망한 방향의 핵심 가치와 초기 MVP를 정리해줘.`,
+    refine: `${starter}를 바탕으로 현재 구상을 더 선명한 기획으로 다듬고, 대상 사용자, 차별점, 핵심 사용자 흐름을 정리해줘.`,
+    mvp: `${starter}를 바탕으로 가장 작은 MVP 범위와 제외할 기능, 빠른 검증 실험을 정리해줘.`,
+    validation: `${starter}를 바탕으로 핵심 가설, 가장 큰 리스크, 먼저 확인할 검증 질문을 우선순위와 함께 정리해줘.`,
+  };
+  return templates[values.intent] || templates.refine;
+}
+
+function buildProjectIdeaAttachment(values = collectProjectIdeaStudioValues()) {
+  if (!hasProjectIdeaStudioContent(values)) {
+    return { attachment: null, truncated: false };
+  }
+
+  const lines = [
+    '# 아이디어 스튜디오 브리프',
+    '',
+    `- 요청 유형: ${getProjectIdeaIntentLabel(values.intent)}`,
+  ];
+
+  if (values.seed) lines.push(`- 현재 아이디어: ${values.seed}`);
+  if (values.problem) lines.push(`- 해결하려는 문제: ${values.problem}`);
+  if (values.audience) lines.push(`- 대상 사용자 / 팀: ${values.audience}`);
+  if (values.successMetric) lines.push(`- 성공 기준: ${values.successMetric}`);
+  if (values.constraints) lines.push(`- 제약 조건: ${values.constraints}`);
+
+  lines.push(
+    '',
+    '원하는 정리 방식:',
+    '- 가능한 방향 2~3개 또는 더 나은 대안',
+    '- 가장 유망한 방향의 핵심 가치 제안',
+    '- MVP 범위 또는 가장 먼저 검증할 실험',
+    '- 버려도 되는 가정, 우선순위가 낮은 항목, 주요 리스크',
+  );
+
+  const rawContent = lines.join('\n');
+  return {
+    attachment: {
+      name: 'idea-studio.txt',
+      kind: 'text',
+      mimeType: 'text/plain',
+      content: rawContent.slice(0, MAX_TEXT_FILE_CHARS),
+    },
+    truncated: rawContent.length > MAX_TEXT_FILE_CHARS,
+  };
+}
+
+function renderProjectIdeaPreview() {
+  if (!projectIdeaPreview) return;
+
+  const values = collectProjectIdeaStudioValues();
+  if (!hasProjectIdeaStudioContent(values)) {
+    projectIdeaPreview.className = 'idea-preview-card empty';
+    projectIdeaPreview.innerHTML = `
+      <strong>자동 질문 미리보기</strong>
+      <p>기획 캔버스를 채우면 자동 생성되는 토론 질문이 여기에 표시됩니다.</p>
+    `;
+    return;
+  }
+
+  projectIdeaPreview.className = 'idea-preview-card';
+  projectIdeaPreview.innerHTML = `
+    <strong>자동 질문 미리보기</strong>
+    <p>${escapeHtml(buildProjectIdeaQuestion(values))}</p>
+  `;
+}
+
 function getWorkflowMeta(workflowKind, evidenceKind) {
   const normalizedEvidenceKind = evidenceKind === 'web'
     ? 'web'
@@ -536,7 +647,7 @@ function getWorkflowMeta(workflowKind, evidenceKind) {
   }
 
   if (workflowKind === 'project') {
-    return { label: '프로젝트 개선', className: 'workflow-project' };
+    return { label: '프로젝트·기획', className: 'workflow-project' };
   }
 
   return { label: '일반 토론', className: 'workflow-general' };
@@ -601,6 +712,177 @@ function canResumeSession(session) {
 function canContinueSession(session) {
   const status = String(session?.status || '').toUpperCase();
   return status === 'COMPLETED';
+}
+
+function getFollowUpTopicPlaceholder() {
+  if (activeSessionSummary?.workflowKind === 'project') {
+    return '예: 이 결론을 실제 구현 우선순위와 검증 계획으로 바꾸려면 무엇부터 확인해야 할까?';
+  }
+
+  if (activeSessionSummary?.evidence?.kind === 'web') {
+    return '예: 이 결론이 제품 방향과 기술 선택에 어떤 추가 검토를 요구하는가?';
+  }
+
+  return '예: 이 결론이 다음 분기 제품 전략이나 시장 대응에 어떤 추가 검토를 요구하는가?';
+}
+
+function getFollowUpTopicSuggestions() {
+  const seen = new Set();
+  const suggestions = [];
+  const buckets = [
+    ...(Array.isArray(latestRoundState?.nextFocus) ? latestRoundState.nextFocus : []),
+    ...(Array.isArray(latestRoundState?.keyIssues) ? latestRoundState.keyIssues : []),
+  ];
+
+  for (const raw of buckets) {
+    const value = String(raw || '').trim();
+    const normalized = value.toLowerCase();
+    if (!value || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    suggestions.push(value);
+    if (suggestions.length >= MAX_FOLLOW_UP_SUGGESTIONS) {
+      break;
+    }
+  }
+
+  return suggestions;
+}
+
+function normalizeFollowUpTopics(rawValue) {
+  return String(rawValue || '')
+    .split('\n')
+    .map((line) => line.replace(/^\s*[-*]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+function buildFollowUpQuestion(topicText) {
+  const topics = normalizeFollowUpTopics(topicText);
+  const modeMeta = getModeMeta(activeSessionSummary?.mode);
+  const sessionWord = modeMeta.sessionWord || '토론';
+
+  if (topics.length <= 1) {
+    const singleTopic = topics[0] || String(topicText || '').trim();
+    return `이전 ${sessionWord}의 결론을 바탕으로 "${singleTopic}"를 새 주제로 삼아 후속 ${sessionWord}를 진행해줘. 기존 결론과 연결되는 점, 달라지는 가정, 추가로 검증할 리스크와 다음 액션을 함께 정리해줘.`;
+  }
+
+  return [
+    `이전 ${sessionWord}의 결론을 바탕으로 다음 주제들을 묶어 후속 ${sessionWord}를 진행해줘.`,
+    '',
+    ...topics.map((topic) => `- ${topic}`),
+    '',
+    '기존 결론과 연결되는 점, 달라지는 가정, 추가로 검증할 리스크와 다음 액션을 함께 정리해줘.',
+  ].join('\n');
+}
+
+function getFollowUpStatusMessage() {
+  if (!canContinueSession(activeSessionSummary)) {
+    return 'COMPLETED 세션을 선택하면 결론을 바탕으로 새 주제를 이어갈 수 있습니다.';
+  }
+
+  if (followUpRequestInFlight) {
+    return '이전 결론을 바탕으로 새 토의를 시작하는 중입니다...';
+  }
+
+  const topics = normalizeFollowUpTopics(followUpTopicInput?.value);
+  if (topics.length > 0) {
+    return `새 주제 ${topics.length}개가 준비되었습니다. 이전 결론과 함께 후속 토의로 전달됩니다.`;
+  }
+
+  if (getFollowUpTopicSuggestions().length > 0) {
+    return '추천 주제를 눌러 추가하거나, 직접 새 주제를 한 줄씩 입력해 후속 토의를 시작하세요.';
+  }
+
+  return '결론에서 파생된 새 주제를 한 줄씩 입력하면 이전 합의와 쟁점을 이어받아 후속 토의를 시작합니다.';
+}
+
+function updateFollowUpStatus(message = getFollowUpStatusMessage()) {
+  if (!followUpStatus) return;
+  followUpStatus.textContent = message;
+}
+
+function addFollowUpTopic(topic) {
+  if (!followUpTopicInput) return;
+
+  const currentTopics = normalizeFollowUpTopics(followUpTopicInput.value);
+  if (currentTopics.some((item) => item.toLowerCase() === String(topic || '').trim().toLowerCase())) {
+    followUpTopicInput.focus();
+    return;
+  }
+
+  const nextValue = currentTopics.length > 0
+    ? `${followUpTopicInput.value.trim()}\n- ${topic}`
+    : topic;
+
+  followUpTopicInput.value = nextValue;
+  updateFollowUpStatus();
+  followUpTopicInput.focus();
+}
+
+function renderFollowUpComposer() {
+  if (!followUpComposer || !followUpTopicInput) return;
+
+  const readyForFollowUp = canContinueSession(activeSessionSummary)
+    && Boolean(synthesisContent)
+    && synthesisContent !== SYNTHESIS_PLACEHOLDER;
+
+  followUpComposer.style.display = readyForFollowUp ? 'flex' : 'none';
+
+  if (!readyForFollowUp) {
+    followUpTopicInput.value = '';
+    followUpTopicInput.disabled = true;
+    if (followUpStartButton) {
+      followUpStartButton.disabled = true;
+    }
+    if (followUpSuggestions) {
+      followUpSuggestions.innerHTML = '';
+      followUpSuggestions.style.display = 'none';
+    }
+    updateFollowUpStatus();
+    return;
+  }
+
+  const modeMeta = getModeMeta(activeSessionSummary?.mode);
+  followUpTopicInput.disabled = followUpRequestInFlight;
+  followUpTopicInput.placeholder = getFollowUpTopicPlaceholder();
+
+  if (followUpStartButton) {
+    followUpStartButton.disabled = followUpRequestInFlight;
+    followUpStartButton.textContent = `새 ${modeMeta.sessionWord} 시작`;
+  }
+
+  const suggestions = getFollowUpTopicSuggestions();
+  if (followUpSuggestions) {
+    if (suggestions.length === 0) {
+      followUpSuggestions.innerHTML = '';
+      followUpSuggestions.style.display = 'none';
+    } else {
+      followUpSuggestions.style.display = 'flex';
+      followUpSuggestions.innerHTML = suggestions
+        .map((topic) => {
+          const escapedTopic = escapeHtml(topic);
+          return `<button class="chip-button follow-up-chip" type="button" data-follow-up-topic="${escapedTopic}">${escapedTopic}</button>`;
+        })
+        .join('');
+    }
+  }
+
+  updateFollowUpStatus();
+}
+
+function focusFollowUpComposer() {
+  renderFollowUpComposer();
+
+  if (!followUpComposer || followUpComposer.style.display === 'none' || !followUpTopicInput) {
+    return false;
+  }
+
+  synthesisSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.setTimeout(() => {
+    followUpTopicInput.focus();
+  }, 120);
+  return true;
 }
 
 function getActiveTimeoutMs() {
@@ -790,17 +1072,21 @@ function renderSynthesis() {
 
   if (!synthesisContent) {
     synthesisSection.style.display = 'none';
+    renderFollowUpComposer();
     return;
   }
 
   synthesisSection.style.display = 'block';
 
-  if (synthesisContent === 'Synthesizing...') {
+  if (synthesisContent === SYNTHESIS_PLACEHOLDER) {
     synthesisBox.innerHTML = '<div class="markdown-body"><p><em>최종 결론을 정리하는 중입니다...</em></p></div>';
+    renderFollowUpComposer();
     return;
   }
 
   synthesisBox.innerHTML = `<div class="markdown-body">${markdownToHtml(synthesisContent)}</div>`;
+  renderFollowUpComposer();
+
 }
 
 function renderListMarkup(items, emptyText) {
@@ -1612,7 +1898,7 @@ function renderRoleConfigPreviewMarkup(config) {
 
       return `
         <section class="role-config-preview-section">
-          <h3>${workflow === 'project' ? '프로젝트 개선' : '근거 기반 토론'}</h3>
+          <h3>${workflow === 'project' ? '프로젝트·기획' : '근거 기반 토론'}</h3>
           ${templates.map((template) => `
             <article class="role-config-preview-card">
               <strong>${escapeHtml(template.label)}</strong>
@@ -1793,7 +2079,7 @@ function renderSessionBrief() {
     sessionBrief.innerHTML = `
       <div class="empty-state">
         <strong>선택된 세션이 없습니다.</strong>
-        <p>프로젝트 개선 또는 근거 기반 토론을 시작하거나, 아래 세션을 선택하세요.</p>
+        <p>프로젝트·기획 또는 근거 기반 토론을 시작하거나, 아래 세션을 선택하세요.</p>
       </div>
     `;
     return;
@@ -2209,7 +2495,7 @@ function handleEnvelope(envelope) {
 
   if (event.type === 'synthesis_ready') {
     if (event.payload.status === 'started') {
-      synthesisContent = 'Synthesizing...';
+      synthesisContent = SYNTHESIS_PLACEHOLDER;
     } else if (event.payload.content) {
       synthesisContent = event.payload.content;
       stopTyping();
@@ -2305,6 +2591,10 @@ function resetLivePanels() {
   latestRoundState = null;
   roundStateHistory = [];
   selectedRoundNumber = null;
+  followUpRequestInFlight = false;
+  if (followUpTopicInput) {
+    followUpTopicInput.value = '';
+  }
   if (roundProgress) {
     roundProgress.style.display = 'none';
   }
@@ -3090,11 +3380,14 @@ if (projectForm) {
     const question = String(formData.get('question') || '').trim();
     const mode = String(formData.get('mode') || 'discussion');
     const modeMeta = getModeMeta(mode);
-    executeStatus.textContent = `프로젝트 개선 ${modeMeta.sessionWord}를 시작하는 중입니다...`;
+    executeStatus.textContent = `프로젝트·기획 ${modeMeta.sessionWord}를 시작하는 중입니다...`;
     const participantResult = resolveWorkflowParticipants('project');
+    const ideaStudioValues = collectProjectIdeaStudioValues();
+    const hasIdeaStudio = hasProjectIdeaStudioContent(ideaStudioValues);
+    const finalQuestion = question || (hasIdeaStudio ? buildProjectIdeaQuestion(ideaStudioValues) : '');
 
-    if (!question) {
-      executeStatus.textContent = '개선 질문을 먼저 입력하세요.';
+    if (!finalQuestion) {
+      executeStatus.textContent = '질문을 입력하거나 기획 캔버스를 먼저 채워주세요.';
       return;
     }
 
@@ -3114,12 +3407,19 @@ if (projectForm) {
     const noContext = formData.get('noContext') !== null;
     const filesInput = projectForm.querySelector('input[name="questionFiles"]');
     const { attachments, warnings } = await buildQuestionAttachments(filesInput?.files);
+    const { attachment: ideaAttachment, truncated: ideaAttachmentTruncated } = buildProjectIdeaAttachment(ideaStudioValues);
+    if (ideaAttachment) {
+      attachments.unshift(ideaAttachment);
+    }
+    if (ideaAttachmentTruncated) {
+      warnings.push('idea-studio.txt: text truncated');
+    }
 
     const result = await executeRunDebate({
       command: 'run_debate',
       timeoutMs: timeoutSeconds * 1000,
       input: {
-        question,
+        question: finalQuestion,
         rounds: totalRounds,
         judge,
         mode,
@@ -3290,35 +3590,98 @@ if (continueSessionButton) {
       return;
     }
 
-    const nextQuestion = window.prompt(
-      '이전 토론 결과를 바탕으로 이어갈 새 질문을 입력하세요.',
-      activeSessionSummary?.question || '',
-    );
-
-    if (!nextQuestion || !nextQuestion.trim()) {
-      executeStatus.textContent = '후속 토론 시작이 취소되었습니다.';
+    const focused = focusFollowUpComposer();
+    if (!focused) {
+      executeStatus.textContent = '결론을 불러온 뒤 새 주제를 입력할 수 있습니다. 잠시 후 다시 시도하세요.';
       return;
     }
 
-    executeStatus.textContent = `${activeSessionId} 결과를 바탕으로 후속 토론을 시작하는 중입니다...`;
-    const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/follow-up`, {
+    executeStatus.textContent = '결론 아래 새 주제 입력란에서 후속 토의를 시작할 수 있습니다.';
+  });
+}
+
+async function startFollowUpSession() {
+  if (!activeSessionId) {
+    executeStatus.textContent = '먼저 세션을 선택하세요.';
+    return;
+  }
+
+  if (!canContinueSession(activeSessionSummary)) {
+    executeStatus.textContent = 'COMPLETED 세션만 후속 토론으로 이어갈 수 있습니다.';
+    updateFollowUpStatus('COMPLETED 세션을 선택한 뒤 다시 시도하세요.');
+    return;
+  }
+
+  const topics = normalizeFollowUpTopics(followUpTopicInput?.value);
+  if (topics.length === 0) {
+    executeStatus.textContent = '새 주제를 먼저 입력하세요.';
+    updateFollowUpStatus('후속 토의를 시작하려면 결론 아래에 새 주제를 한 줄 이상 입력하세요.');
+    followUpTopicInput?.focus();
+    return;
+  }
+
+  followUpRequestInFlight = true;
+  renderFollowUpComposer();
+  executeStatus.textContent = `${activeSessionId} 결론을 바탕으로 새 주제 토의를 시작하는 중입니다...`;
+  updateFollowUpStatus();
+
+  let ok, data;
+  try {
+    ({ ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/follow-up`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        question: nextQuestion.trim(),
+        question: buildFollowUpQuestion(topics.join('\n')),
         timeoutMs: getActiveTimeoutMs(),
       }),
-    });
+    }));
+  } finally {
+    followUpRequestInFlight = false;
+    renderFollowUpComposer();
+  }
 
-    if (!ok) {
-      executeStatus.textContent = data.error || '후속 토론 시작에 실패했습니다.';
-      return;
+  if (!ok) {
+    const errorMessage = data.error || '후속 토의 시작에 실패했습니다.';
+    executeStatus.textContent = errorMessage;
+    updateFollowUpStatus(errorMessage);
+    return;
+  }
+
+  executeStatus.textContent = `${data.continuedFromSessionId || activeSessionId} 결론을 바탕으로 새 세션 ${data.sessionId} 후속 토의를 시작했습니다.`;
+  if (followUpTopicInput) {
+    followUpTopicInput.value = '';
+  }
+  updateFollowUpStatus('새 후속 토의가 시작되었습니다. 새 세션을 불러옵니다.');
+  await refreshSessions();
+  if (data.sessionId) {
+    await selectSession(data.sessionId);
+  }
+}
+
+if (followUpTopicInput) {
+  followUpTopicInput.addEventListener('input', () => {
+    updateFollowUpStatus();
+  });
+
+  followUpTopicInput.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void startFollowUpSession();
     }
+  });
+}
 
-    executeStatus.textContent = `${data.continuedFromSessionId || activeSessionId} 결과를 바탕으로 새 세션 ${data.sessionId} 후속 토론을 시작했습니다.`;
-    await refreshSessions();
-    if (data.sessionId) {
-      await selectSession(data.sessionId);
+if (followUpStartButton) {
+  followUpStartButton.addEventListener('click', () => {
+    void startFollowUpSession();
+  });
+}
+
+if (followUpSuggestions) {
+  followUpSuggestions.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-follow-up-topic]');
+    if (button) {
+      addFollowUpTopic(button.getAttribute('data-follow-up-topic') || '');
     }
   });
 }
@@ -3434,11 +3797,17 @@ document.querySelectorAll('.template-chip').forEach((chip) => {
   chip.addEventListener('click', () => {
     const template = chip.getAttribute('data-template') || '';
     const target = chip.getAttribute('data-template-target');
+    const projectIntent = chip.getAttribute('data-project-intent');
 
     if (target === 'news' && newsQuestionInput) {
       newsQuestionInput.value = template;
       newsQuestionInput.focus();
       return;
+    }
+
+    if (projectIntent && projectIdeaIntentInput) {
+      projectIdeaIntentInput.value = projectIntent;
+      renderProjectIdeaPreview();
     }
 
     if (projectQuestionInput) {
@@ -3447,6 +3816,20 @@ document.querySelectorAll('.template-chip').forEach((chip) => {
     }
   });
 });
+
+[
+  projectIdeaIntentInput,
+  projectIdeaAudienceInput,
+  projectIdeaSeedInput,
+  projectIdeaProblemInput,
+  projectIdeaSuccessMetricInput,
+  projectIdeaConstraintsInput,
+].forEach((control) => {
+  control?.addEventListener('input', renderProjectIdeaPreview);
+  control?.addEventListener('change', renderProjectIdeaPreview);
+});
+
+renderProjectIdeaPreview();
 
 bindAdvancedToggle(projectAdvancedToggle, projectAdvancedFields);
 bindAdvancedToggle(newsAdvancedToggle, newsAdvancedFields);

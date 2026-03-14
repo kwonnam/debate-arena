@@ -19,7 +19,7 @@ import { DebateOrchestrator } from '../core/orchestrator.js';
 import { normalizeDebateParticipants } from '../core/participants.js';
 import { buildFollowUpContext } from '../core/follow-up.js';
 import { buildResumePlan, hydrateParticipantsForResume } from '../core/resume.js';
-import { InMemorySessionStore, type SessionStore } from '../core/session-store.js';
+import { PersistentSessionStore, type SessionStore } from '../core/session-store.js';
 import { collectProjectContext } from '../core/project-context.js';
 import { createProviderMap, listProviderModels, listProviderOptions } from '../providers/factory.js';
 import { createSilentCallbacks } from '../ui/renderer.js';
@@ -112,7 +112,7 @@ const MAX_ATTACHMENT_IMAGE_CHARS = 180_000;
 
 class DashboardSessionStore implements SessionStore {
   constructor(
-    private readonly store: InMemorySessionStore,
+    private readonly store: SessionStore,
     private readonly hub: EventHub,
   ) {}
 
@@ -225,7 +225,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
   const config = DEFAULT_DASHBOARD_CONFIG;
   const hub = new EventHub();
-  const baseStore = new InMemorySessionStore();
+  const baseStore = new PersistentSessionStore();
   const sessionStore = new DashboardSessionStore(baseStore, hub);
   const cleanupRunSession = (sessionId: string): void => {
     const entry = runningSessions.get(sessionId);

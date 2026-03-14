@@ -696,6 +696,50 @@ textarea:focus {
   border: 1px dashed rgba(15, 118, 110, 0.18);
 }
 
+.idea-studio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.92), rgba(255, 251, 245, 0.88)),
+    rgba(255, 255, 255, 0.72);
+}
+
+.idea-studio-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.idea-studio-head strong,
+.idea-preview-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.idea-studio-head p,
+.idea-preview-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.idea-preview-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.idea-preview-card.empty {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.46);
+}
+
 .advanced-fields.collapsed {
   display: none;
 }
@@ -1585,6 +1629,59 @@ textarea:focus {
   text-transform: uppercase;
 }
 
+.synthesis-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.follow-up-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: linear-gradient(145deg, rgba(240, 253, 250, 0.82), rgba(255, 251, 245, 0.74));
+}
+
+.follow-up-composer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.follow-up-composer-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.follow-up-composer-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.follow-up-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.follow-up-chip {
+  border-radius: 999px;
+}
+
+.follow-up-status {
+  margin: 0;
+}
+
+.follow-up-actions {
+  justify-content: flex-end;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -2084,5 +2181,9 @@ textarea:focus {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 4px;
+  }
+
+  .follow-up-composer-head {
+    flex-direction: column;
   }
 }

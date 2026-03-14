@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>프로젝트 개선 워크벤치</title>
+    <title>프로젝트·기획 워크벤치</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body data-workflow="project">
@@ -12,15 +12,15 @@
     <header class="app-header app-header-split">
       <div class="hero-copy">
         <p class="eyebrow">DEBATE ARENA / PROJECT WORKBENCH</p>
-        <h1>프로젝트 개선 아이디어 워크벤치</h1>
+        <h1>프로젝트·기획 아이디어 워크벤치</h1>
         <p class="subtitle">
-          로컬 작업공간을 기준으로 UX 개선, 구조 개편, 기술 부채 정리를 토론하는 전용 페이지입니다.
+          로컬 작업공간을 기준으로 기존 프로젝트 개선뿐 아니라 새로운 기획 발상, 아이디어 정제, MVP 설계까지 토론하는 전용 페이지입니다.
         </p>
       </div>
       <div class="header-actions header-actions-column">
         <nav class="page-switcher" aria-label="워크벤치 이동">
           <a class="page-link" href="/">허브</a>
-          <a class="page-link is-active" href="/project.html">프로젝트 개선</a>
+          <a class="page-link is-active" href="/project.html">프로젝트·기획</a>
           <a class="page-link" href="/news.html">근거 기반 토론</a>
           <a class="page-link" href="/settings.html">설정</a>
         </nav>
@@ -35,22 +35,22 @@
       <div class="workflow-step is-active">
         <span class="workflow-index">1</span>
         <div>
-          <strong>프로젝트 범위 지정</strong>
-          <p>질문, 파일, 실행 경로를 명확히 지정해 로컬 문맥을 고정합니다.</p>
+          <strong>문제 또는 아이디어 입력</strong>
+          <p>질문만 던져도 되고, 기획 캔버스로 대상 사용자·문제·제약을 구조화할 수도 있습니다.</p>
         </div>
       </div>
       <div class="workflow-step">
         <span class="workflow-index">2</span>
         <div>
-          <strong>다중 모델 토론</strong>
-          <p>서로 다른 모델이 프로젝트 개선안을 라운드별로 검토합니다.</p>
+          <strong>다중 모델 검토</strong>
+          <p>서로 다른 모델이 아이디어 확장, 우선순위, MVP 범위를 라운드별로 검토합니다.</p>
         </div>
       </div>
       <div class="workflow-step">
         <span class="workflow-index">3</span>
         <div>
-          <strong>실행 가능한 결론</strong>
-          <p>합의점, 쟁점, 다음 포커스를 synthesis와 함께 정리합니다.</p>
+          <strong>실행 가능한 정리</strong>
+          <p>추천 방향, 버려야 할 아이디어, 검증 질문, 다음 액션을 synthesis와 함께 정리합니다.</p>
         </div>
       </div>
     </section>
@@ -65,7 +65,7 @@
       <div class="runtime-actions">
         <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
         <button class="button subtle runtime-btn" type="button" id="resume-session">멈춘 지점부터 재시작</button>
-        <button class="button subtle runtime-btn" type="button" id="continue-session">결과 기반 후속 토론</button>
+        <button class="button subtle runtime-btn" type="button" id="continue-session">결론에서 새 주제</button>
         <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
         <label class="runtime-label">
           Replay from
@@ -85,20 +85,20 @@
           <div class="section-heading">
             <span class="step-badge">Local</span>
             <div>
-              <h2>프로젝트 개선 아이디어</h2>
-              <p>로컬 프로젝트를 기준으로 UX, 구조, 기술 부채 개선 방향을 토론합니다.</p>
+              <h2>프로젝트·기획 아이디어</h2>
+              <p>로컬 프로젝트 개선부터 신규 기획 발상, MVP 설계, 아이디어 정제까지 한 흐름에서 토론합니다.</p>
             </div>
           </div>
 
           <form class="provider-form" id="project-form">
             <div class="field">
-              <label>개선 질문</label>
+              <label>질문 또는 요청</label>
               <textarea
                 name="question"
                 rows="5"
-                placeholder="예: 이 프로젝트를 대시보드 중심 제품으로 발전시키려면 어떤 구조와 UX 개선이 필요한가?"
-                required
+                placeholder="예: 협업형 토론 앱을 신규 제품으로 기획한다면 어떤 사용자 문제부터 풀고 어떤 MVP로 시작해야 할까?"
               ></textarea>
+              <small class="field-hint">질문이 없더라도 아래 기획 캔버스를 채우면 자동으로 토론 질문을 구성합니다.</small>
             </div>
 
             <div class="template-row">
@@ -107,6 +107,7 @@
                 type="button"
                 data-template-target="project"
                 data-template="이 프로젝트의 UX 흐름을 사용자 관점에서 개선하는 아이디어를 토론해줘"
+                data-project-intent="refine"
               >
                 UX 개선
               </button>
@@ -114,7 +115,35 @@
                 class="chip-button template-chip"
                 type="button"
                 data-template-target="project"
+                data-template="새로운 제품 또는 기능 아이디어를 2~3개 제안하고, 가장 유망한 방향의 가치 제안과 MVP를 정리해줘"
+                data-project-intent="propose"
+              >
+                신규 기획
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="project"
+                data-template="지금 떠올린 아이디어를 더 선명한 제품 기획으로 다듬고, 대상 사용자와 핵심 사용자 흐름을 정리해줘"
+                data-project-intent="refine"
+              >
+                아이디어 다듬기
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="project"
+                data-template="이 아이디어를 가장 작은 MVP 범위로 줄이고, 첫 검증 실험과 제외할 기능까지 정리해줘"
+                data-project-intent="mvp"
+              >
+                MVP 범위
+              </button>
+              <button
+                class="chip-button template-chip"
+                type="button"
+                data-template-target="project"
                 data-template="이 코드베이스의 아키텍처와 정보 구조를 어떻게 정리하면 유지보수성이 좋아질지 토론해줘"
+                data-project-intent="refine"
               >
                 아키텍처
               </button>
@@ -123,10 +152,89 @@
                 type="button"
                 data-template-target="project"
                 data-template="이 프로젝트의 기술 부채와 성능 병목을 어떻게 줄일지 우선순위를 포함해 토론해줘"
+                data-project-intent="validation"
               >
                 기술 부채
               </button>
             </div>
+
+            <section class="idea-studio-card" aria-label="기획 캔버스">
+              <div class="idea-studio-head">
+                <span class="mini-badge">Idea Studio</span>
+                <div>
+                  <strong>기획 캔버스</strong>
+                  <p>신규 기획이나 막연한 아이디어를 구조화해, 질문 없이도 제안·정제·검증 토론을 시작할 수 있습니다.</p>
+                </div>
+              </div>
+
+              <div class="inline-fields">
+                <div class="field">
+                  <label for="project-idea-intent">요청 유형</label>
+                  <select name="ideaIntent" id="project-idea-intent">
+                    <option value="refine" selected>아이디어 다듬기</option>
+                    <option value="propose">새 아이디어 제안</option>
+                    <option value="mvp">MVP 범위 정리</option>
+                    <option value="validation">가설/리스크 검증</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="project-idea-audience">대상 사용자 / 팀</label>
+                  <input
+                    name="ideaAudience"
+                    id="project-idea-audience"
+                    placeholder="예: PM과 창업 초기 SaaS 팀"
+                  />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="project-idea-seed">현재 아이디어 또는 출발점</label>
+                <textarea
+                  name="ideaSeed"
+                  id="project-idea-seed"
+                  rows="4"
+                  placeholder="예: 여러 AI가 다른 관점으로 토론해 제품 방향을 제안하는 워크벤치를 만들고 싶다."
+                ></textarea>
+              </div>
+
+              <div class="field">
+                <label for="project-idea-problem">해결하려는 문제</label>
+                <textarea
+                  name="ideaProblem"
+                  id="project-idea-problem"
+                  rows="3"
+                  placeholder="예: 아이디어는 많은데 우선순위와 검증 기준이 없어 실행으로 이어지지 않는다."
+                ></textarea>
+              </div>
+
+              <div class="inline-fields">
+                <div class="field">
+                  <label for="project-idea-success-metric">성공 기준</label>
+                  <input
+                    name="ideaSuccessMetric"
+                    id="project-idea-success-metric"
+                    placeholder="예: 첫 주 안에 3개 대안과 1개 MVP 가설 도출"
+                  />
+                </div>
+                <div class="field">
+                  <label for="project-idea-constraints">제약 조건</label>
+                  <input
+                    name="ideaConstraints"
+                    id="project-idea-constraints"
+                    placeholder="예: 2주 MVP, 2인 팀, 외부 API 최소화"
+                  />
+                </div>
+              </div>
+
+              <div class="idea-preview-card empty" id="project-idea-preview">
+                <strong>자동 질문 미리보기</strong>
+                <p>기획 캔버스를 채우면 자동 생성되는 토론 질문이 여기에 표시됩니다.</p>
+              </div>
+
+              <p class="field-hint">
+                입력한 내용은 세션에 <code>idea-studio.txt</code> 첨부로 함께 전달되어, 아이디어 제안·정리·검증 질문 도출에 활용됩니다.
+              </p>
+            </section>
 
             <div class="field">
               <label>진행 방식</label>
@@ -140,13 +248,13 @@
             <div class="field">
               <label>로컬 프로젝트 경로</label>
               <input name="executionCwd" id="project-execution-cwd" placeholder="/absolute/path or ./relative" />
-              <small class="field-hint" id="project-runtime-hint">현재 로컬 작업 디렉터리를 기본값으로 채웁니다.</small>
+              <small class="field-hint" id="project-runtime-hint">현재 로컬 작업 디렉터리를 기본값으로 채웁니다. 순수 기획만 다룰 때는 고급 설정에서 프로젝트 자동 컨텍스트를 끌 수 있습니다.</small>
             </div>
 
             <div class="field">
-              <label>관련 파일</label>
+              <label>관련 파일 또는 참고 자료</label>
               <input name="questionFiles" type="file" multiple />
-              <small class="field-hint">텍스트 파일은 본문으로, 이미지는 data URL로 포함됩니다.</small>
+              <small class="field-hint">PRD 초안, 기획 메모, 화면 스케치, 데이터 샘플을 함께 넣을 수 있습니다.</small>
             </div>
 
             <button class="button subtle wide-button" type="button" id="project-advanced-toggle">고급 설정 보기</button>
@@ -227,7 +335,7 @@
             </div>
 
             <div class="execute-actions">
-              <button class="button" type="submit">프로젝트 개선 세션 시작</button>
+              <button class="button" type="submit">프로젝트·기획 세션 시작</button>
             </div>
           </form>
         </section>
@@ -237,13 +345,13 @@
             <span class="step-badge muted">현재</span>
             <div>
               <h2>세션 컨텍스트</h2>
-              <p>현재 선택한 프로젝트 세션의 실행 범위와 상태를 확인합니다.</p>
+              <p>현재 선택한 프로젝트·기획 세션의 실행 범위와 상태를 확인합니다.</p>
             </div>
           </div>
           <div class="session-context" id="session-brief">
             <div class="empty-state">
               <strong>선택된 세션이 없습니다.</strong>
-              <p>프로젝트 개선 토론을 시작하거나, 아래 세션을 선택하세요.</p>
+              <p>프로젝트 개선이나 새 기획 토론을 시작하거나, 아래 세션을 선택하세요.</p>
             </div>
           </div>
         </section>
@@ -252,8 +360,8 @@
           <div class="section-heading">
             <span class="step-badge muted">기록</span>
             <div>
-              <h2>최근 프로젝트 세션</h2>
-              <p>프로젝트 개선 흐름에서 생성된 세션만 별도로 표시합니다.</p>
+              <h2>최근 프로젝트·기획 세션</h2>
+              <p>프로젝트 개선과 신규 기획 흐름에서 생성된 세션만 별도로 표시합니다.</p>
             </div>
           </div>
           <div class="session-list" id="session-list"></div>
@@ -302,6 +410,30 @@
         <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
           <span class="synthesis-hero-label">Synthesis</span>
           <div id="synthesis"></div>
+          <div class="follow-up-composer" id="follow-up-composer" style="display:none">
+            <div class="follow-up-composer-head">
+              <div>
+                <h3>새 주제로 후속 토의</h3>
+                <p>현재 결론을 배경으로 새 주제를 추가해 다음 토의를 바로 시작합니다.</p>
+              </div>
+              <span class="meta-badge">Follow-up</span>
+            </div>
+            <div class="field">
+              <label for="follow-up-topic">추가할 새 주제</label>
+              <textarea
+                id="follow-up-topic"
+                rows="3"
+                placeholder="예: 이 결론을 실제 구현 우선순위와 검증 계획으로 바꾸려면 무엇부터 확인해야 할까?"
+              ></textarea>
+            </div>
+            <div class="follow-up-suggestions" id="follow-up-suggestions" style="display:none"></div>
+            <p class="field-hint follow-up-status" id="follow-up-status">
+              결론에서 파생된 새 주제를 입력하면 이전 합의와 쟁점을 이어받아 후속 토의를 시작합니다.
+            </p>
+            <div class="execute-actions follow-up-actions">
+              <button class="button" type="button" id="follow-up-start">새 토의 시작</button>
+            </div>
+          </div>
         </section>
       </main>
     </div>
