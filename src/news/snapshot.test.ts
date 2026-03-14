@@ -22,6 +22,7 @@ describe('createSnapshotId', () => {
   it('스냅샷 요약에서 기사 수와 상위 도메인을 계산한다', () => {
     const summary = summarizeSnapshot({
       id: 'snap-1',
+      kind: 'web',
       query: 'ai regulation',
       collectedAt: '2026-03-07T00:00:00.000Z',
       sources: ['rss', 'newsapi'],
@@ -55,6 +56,7 @@ describe('createSnapshotId', () => {
     });
 
     expect(summary.articleCount).toBe(3);
+    expect(summary.kind).toBe('web');
     expect(summary.sources).toEqual(['rss', 'newsapi']);
     expect(summary.topDomains).toEqual(['example.com', 'news.example.org']);
     expect(summary.excludedCount).toBe(1);

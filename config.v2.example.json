@@ -4,6 +4,7 @@
     "codex": {
       "type": "cli",
       "command": "codex exec --skip-git-repo-check -",
+      "webSearch": true,
       "model": "default",
       "capabilities": {
         "supportsStreaming": true,
@@ -13,6 +14,9 @@
     "claude": {
       "type": "cli",
       "command": "claude -p",
+      "mcpConfigs": ["./.claude/debate-arena.mcp.json"],
+      "strictMcpConfig": true,
+      "allowedTools": ["mcp__brave-search"],
       "model": "default",
       "capabilities": {
         "supportsStreaming": true,
@@ -28,10 +32,31 @@
         "maxContextTokens": 1000000
       }
     },
+    "grok-web-a": {
+      "type": "web-ai-bridge",
+      "bridgeUrl": "ws://127.0.0.1:17373",
+      "model": "grok.com",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 128000
+      }
+    },
+    "grok-web-b": {
+      "type": "web-ai-bridge",
+      "bridgeUrl": "ws://127.0.0.1:17473",
+      "model": "grok.com",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 128000
+      }
+    },
     "ollama-local": {
       "type": "ollama-compat",
       "baseUrl": "http://127.0.0.1:11434",
       "model": "llama3.2",
+      "ollamaTools": {
+        "webSearch": true
+      },
       "capabilities": {
         "supportsStreaming": true,
         "maxContextTokens": 131072
@@ -113,7 +138,7 @@
     "defaultJudge": "ollama-cloud-qwen3-coder-next",
     "defaultFormat": "pretty",
     "stream": true,
-    "commandTimeoutMs": 180000,
+    "commandTimeoutMs": 600000,
     "applyTimeoutMs": 300000
   },
   "dashboard": {
@@ -126,6 +151,7 @@
   "news": {
     "providers": {
       "brave":   { "enabled": true },
+      "braveWeb": { "enabled": true },
       "newsapi": { "enabled": false },
       "rss": {
         "enabled": false,

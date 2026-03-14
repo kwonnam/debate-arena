@@ -1,6 +1,10 @@
 export interface AppConfig {
   codexCommand: string;
+  codexWebSearch: boolean;
   claudeCommand: string;
+  claudeMcpConfig: string;
+  claudeAllowedTools: string;
+  claudeStrictMcpConfig: boolean;
   geminiCommand: string;
   commandTimeoutMs: number;
   defaultRounds: number;
@@ -16,9 +20,13 @@ export interface AppConfig {
 
 export const DEFAULT_CONFIG: AppConfig = {
   codexCommand: 'codex exec --skip-git-repo-check -',
+  codexWebSearch: false,
   claudeCommand: 'claude -p',
+  claudeMcpConfig: '',
+  claudeAllowedTools: '',
+  claudeStrictMcpConfig: false,
   geminiCommand: 'gemini -p {prompt}',
-  commandTimeoutMs: 180000,
+  commandTimeoutMs: 600000,
   defaultRounds: 3,
   defaultJudge: 'claude',
   defaultFormat: 'pretty',
@@ -37,9 +45,18 @@ export interface ProviderCapabilities {
   maxContextTokens: number;
 }
 
+export interface OllamaToolConfig {
+  webSearch?: boolean;
+  webFetch?: boolean;
+  maxIterations?: number;
+  apiBaseUrl?: string;
+  apiKeyEnvVar?: string;
+}
+
 export interface ProviderConfig {
-  type: 'ollama-compat' | 'anthropic' | 'cli';
+  type: 'ollama-compat' | 'anthropic' | 'cli' | 'web-ai-bridge';
   baseUrl?: string;
+  bridgeUrl?: string;
   apiKeyEnvVar?: string;   // 환경변수 이름 (평문 저장 금지)
   apiKey?: string;         // 테스트/로컬 용도 (권장: env var)
   openaiApiKey?: string;   // cloud provider 편의 alias
@@ -47,6 +64,11 @@ export interface ProviderConfig {
   ollamaApiKey?: string;   // ollama cloud key alias
   ollama_api_key?: string; // ollama cloud key alias (snake_case)
   command?: string;        // CLI 타입 전용
+  webSearch?: boolean;     // Codex CLI native web search
+  mcpConfigs?: string[];   // Claude CLI --mcp-config
+  strictMcpConfig?: boolean;
+  allowedTools?: string[]; // Claude CLI --allowedTools
+  ollamaTools?: OllamaToolConfig;
   model: string;
   capabilities: ProviderCapabilities;
 }
@@ -68,6 +90,7 @@ export interface DashboardConfig {
 
 export interface NewsProviderConfig {
   brave: { enabled: boolean };
+  braveWeb?: { enabled: boolean };
   newsapi: { enabled: boolean };
   rss: { enabled: boolean; feeds: string[] };
 }
@@ -96,6 +119,7 @@ export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
 export const DEFAULT_NEWS_CONFIG: NewsConfig = {
   providers: {
     brave: { enabled: true },
+    braveWeb: { enabled: true },
     newsapi: { enabled: false },
     rss: { enabled: false, feeds: [] },
   },

@@ -4,58 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-import type { Message, MessageAttachment } from './types.js';
+import type { Message } from './types.js';
 import { ProviderTimeoutError } from './errors.js';
+import { renderMessages } from './prompt-renderer.js';
 
 const ABORT_GRACE_PERIOD_MS = 3000;
-const ATTACHMENT_PREVIEW_LIMIT = 1200;
-
-function renderMessages(messages: Message[]): string {
-  const systemMsgs = messages.filter((m) => m.role === 'system');
-  const conversationMsgs = messages.filter((m) => m.role !== 'system');
-
-  const parts: string[] = [];
-
-  if (systemMsgs.length > 0) {
-    parts.push(systemMsgs.map((m) => m.content).join('\n\n'));
-    parts.push('---');
-  }
-
-  for (const msg of conversationMsgs) {
-    if (msg.role === 'assistant') {
-      parts.push(`[Your previous response]\n${renderMessageWithAttachments(msg)}`);
-    } else {
-      parts.push(renderMessageWithAttachments(msg));
-    }
-  }
-
-  return parts.join('\n\n');
-}
-
-function renderMessageWithAttachments(message: Message): string {
-  if (!message.attachments || message.attachments.length === 0) {
-    return message.content;
-  }
-
-  const attachmentText = message.attachments
-    .map(formatAttachmentPreview)
-    .join('\n\n');
-
-  return `${message.content}\n\n[Attached Inputs]\n${attachmentText}`;
-}
-
-function formatAttachmentPreview(attachment: MessageAttachment): string {
-  const name = attachment.name ?? 'attachment';
-  const mimeType = attachment.mimeType ?? (attachment.kind === 'image' ? 'image/unknown' : 'text/plain');
-
-  if (attachment.kind === 'image') {
-    return `- image: ${name} (${mimeType})`;
-  }
-
-  const preview = attachment.content.slice(0, ATTACHMENT_PREVIEW_LIMIT);
-  const suffix = attachment.content.length > ATTACHMENT_PREVIEW_LIMIT ? '\n... [truncated]' : '';
-  return `- file: ${name} (${mimeType})\n\`\`\`text\n${preview}${suffix}\n\`\`\``;
-}
+const STDERR_PREVIEW_LIMIT = 2000;
 
 async function buildCommand(template: string, prompt: string): Promise<{
   command: string;
@@ -225,7 +179,11 @@ export async function* runCommandStream(
   }
 
   if (timedOut) {
-    throw new ProviderTimeoutError(`Command timed out after ${timeoutMs}ms: ${template}`, timeoutMs);
+    const stderrPreview = formatStderrPreview(stderr);
+    throw new ProviderTimeoutError(
+      `Command timed out after ${timeoutMs}ms: ${template}${stderrPreview ? `\nStderr:\n${stderrPreview}` : ''}`,
+      timeoutMs,
+    );
   }
 
   if (aborted) {
@@ -242,4 +200,13 @@ export async function* runCommandStream(
     }
     throw new Error(`Command failed (${template}): ${details}`);
   }
+}
+
+function formatStderrPreview(stderr: string): string {
+  const normalized = stderr.trim();
+  if (!normalized) return '';
+  if (normalized.length <= STDERR_PREVIEW_LIMIT) {
+    return normalized;
+  }
+  return `${normalized.slice(0, STDERR_PREVIEW_LIMIT)}…`;
 }

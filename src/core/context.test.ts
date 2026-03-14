@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DebateContext } from './context.js';
 import type { DebateParticipant } from '../types/roles.js';
+import type { PreviousDebateContext } from '../types/debate.js';
 
 const codexParticipant: DebateParticipant = {
   id: 'ux',
@@ -136,5 +137,52 @@ describe('DebateContext', () => {
 
     expect(fallbackSection).toContain('### User');
     expect(fallbackSection).toContain('운영팀 인력이 적습니다.');
+  });
+
+  it('opening prompt에 이전 토론 컨텍스트를 주입한다', () => {
+    const previousDebate: PreviousDebateContext = {
+      sourceSessionId: 'session-prev',
+      question: 'REST vs GraphQL?',
+      judge: 'claude',
+      participants: [
+        { label: 'UX 전문가', provider: 'codex' },
+        { label: '백엔드 개발자', provider: 'claude' },
+      ],
+      synthesis: '이전 토론에서는 운영 복잡도와 변경 빈도의 균형이 핵심이라고 결론냈다.',
+      latestRoundState: {
+        round: 3,
+        summary: '운영 복잡도와 변경 빈도가 핵심 쟁점이었다.',
+        keyIssues: ['운영 복잡도'],
+        agreements: ['스키마 품질은 중요하다'],
+        nextFocus: ['팀 역량별 선택 기준 정리'],
+        shouldSuggestStop: true,
+        stopReason: '핵심 쟁점이 충분히 수렴했다.',
+        source: 'judge',
+        transcriptFallbackUsed: false,
+      },
+    };
+
+    const context = new DebateContext(
+      '그렇다면 모바일 앱 백엔드에는 어떤 선택이 더 적합한가?',
+      undefined,
+      undefined,
+      [],
+      [codexParticipant, claudeParticipant],
+      undefined,
+      undefined,
+      previousDebate,
+    );
+
+    const messages = context.buildMessagesFor(codexParticipant, 1, 'opening');
+    const userContent = messages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.content)
+      .join('\n');
+
+    expect(userContent).toContain('## Previous Debate Context');
+    expect(userContent).toContain('session-prev');
+    expect(userContent).toContain('Previous Synthesis:');
+    expect(userContent).toContain('운영 복잡도');
+    expect(userContent).toContain('모바일 앱 백엔드');
   });
 });

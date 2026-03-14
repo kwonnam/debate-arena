@@ -7,7 +7,7 @@ import { handleStop } from './handlers/stop.js';
 import { handleModel } from './handlers/model.js';
 import { handleDebate } from './handlers/debate.js';
 import { handleDashboard } from './handlers/dashboard.js';
-import { handleNews } from './handlers/news.js';
+import { handleNews, handleWeb } from './handlers/news.js';
 import {
   handleRounds,
   handleJudge,
@@ -62,6 +62,7 @@ handlers.set('stop', wrapVoid((args) => handleStop(args)));
 handlers.set('model', wrapVoid((args) => handleModel(args)));
 handlers.set('dashboard', wrapVoid(() => handleDashboard()));
 handlers.set('news', async (args, ctx) => handleNews(args, ctx.session));
+handlers.set('web', async (args, ctx) => handleWeb(args, ctx.session));
 
 handlers.set('rounds', (args, ctx) => applySessionUpdate(handleRounds(args, ctx.session), ctx));
 handlers.set('judge', (args, ctx) => applySessionUpdate(handleJudge(args, ctx.session), ctx));

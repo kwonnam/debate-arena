@@ -2,6 +2,7 @@ import type { Message } from '../providers/types.js';
 import type {
   DebateAttachment,
   DebateMessage,
+  PreviousDebateContext,
   DebateRoundState,
   NewsMode,
 } from '../types/debate.js';
@@ -27,6 +28,7 @@ export class DebateContext {
   private participants?: DebateParticipant[];
   private snapshot?: EvidenceSnapshot;
   private newsMode?: NewsMode;
+  private previousDebate?: PreviousDebateContext;
 
   constructor(
     question: string,
@@ -36,6 +38,7 @@ export class DebateContext {
     participants?: DebateParticipant[],
     snapshot?: EvidenceSnapshot,
     newsMode?: NewsMode,
+    previousDebate?: PreviousDebateContext,
   ) {
     this.question = question;
     this.projectContext = projectContext;
@@ -44,6 +47,7 @@ export class DebateContext {
     this.participants = participants;
     this.snapshot = snapshot;
     this.newsMode = newsMode;
+    this.previousDebate = previousDebate;
   }
 
   addMessage(message: DebateMessage): void {
@@ -129,9 +133,17 @@ export class DebateContext {
       ].join('\n');
     }
 
+    if (this.previousDebate) {
+      content += buildPreviousDebateSection(this.previousDebate);
+    }
+
     if (this.snapshot && this.snapshot.articles.length > 0 && participant) {
       const mode = this.getEvidenceModeForParticipant(participant);
-      const evidenceSection = buildRoundEvidenceSection(mode, this.snapshot.articles);
+      const evidenceSection = buildRoundEvidenceSection(
+        mode,
+        this.snapshot.articles,
+        this.snapshot.kind ?? 'news',
+      );
       if (evidenceSection) {
         content += evidenceSection;
       }
@@ -197,9 +209,12 @@ export class DebateContext {
       role: 'user',
       content: [
         '## Your Task',
-        'Using the compressed debate state above, respond to the strongest unresolved disagreements from the other participants.',
-        'Use the latest participant responses and any explicit user guidance as higher-priority context than older rounds.',
-        'Directly address counterarguments, build on valid agreements, and avoid repeating settled points.',
+        this.prompts.roundTaskPrompt?.()
+          ?? [
+            'Using the compressed debate state above, respond to the strongest unresolved disagreements from the other participants.',
+            'Use the latest participant responses and any explicit user guidance as higher-priority context than older rounds.',
+            'Directly address counterarguments, build on valid agreements, and avoid repeating settled points.',
+          ].join('\n'),
       ].join('\n'),
     });
   }
@@ -237,4 +252,57 @@ export class DebateContext {
       }
     }
   }
+}
+
+function buildPreviousDebateSection(previousDebate: PreviousDebateContext): string {
+  const participantSummary = previousDebate.participants
+    .map((participant) => `${participant.label} (${participant.provider})`)
+    .join(', ');
+
+  const lines = [
+    '',
+    '## Previous Debate Context',
+    'A completed prior debate is provided as background. Use it to continue the investigation, but do not treat it as unquestionable truth.',
+    `Source Session: ${previousDebate.sourceSessionId}`,
+    `Previous Question: "${previousDebate.question}"`,
+  ];
+
+  if (participantSummary) {
+    lines.push(`Previous Participants: ${participantSummary}`);
+  }
+
+  if (previousDebate.judge) {
+    lines.push(`Previous Judge: ${previousDebate.judge}`);
+  }
+
+  if (previousDebate.synthesis) {
+    lines.push('', 'Previous Synthesis:', previousDebate.synthesis);
+  }
+
+  const latestRoundState = previousDebate.latestRoundState;
+  if (latestRoundState) {
+    lines.push('', `Previous Final Round Summary: ${latestRoundState.summary}`);
+
+    if (latestRoundState.keyIssues.length > 0) {
+      lines.push('Previous Key Issues:');
+      lines.push(...latestRoundState.keyIssues.map((issue) => `- ${issue}`));
+    }
+
+    if (latestRoundState.agreements.length > 0) {
+      lines.push('Previous Agreements:');
+      lines.push(...latestRoundState.agreements.map((item) => `- ${item}`));
+    }
+
+    if (latestRoundState.nextFocus.length > 0) {
+      lines.push('Previous Next Focus:');
+      lines.push(...latestRoundState.nextFocus.map((item) => `- ${item}`));
+    }
+  }
+
+  lines.push(
+    '',
+    'In this new debate, build on the earlier findings where useful, challenge weak assumptions when needed, and stay focused on the new question.',
+  );
+
+  return lines.join('\n');
 }

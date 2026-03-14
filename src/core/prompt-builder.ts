@@ -1,3 +1,4 @@
+import type { EvidenceKind, EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
 import type { DebateMode, DebateRoundState, ParticipantName, ProviderName } from '../types/debate.js';
 import type { DebateParticipant } from '../types/roles.js';
 import { buildParticipantRolePrompt } from '../roles/config.js';
@@ -8,6 +9,7 @@ export interface PromptBuilders {
   systemPrompt: (participant: DebateParticipant, projectContext?: string, participants?: DebateParticipant[]) => string;
   openingPrompt: (question: string) => string;
   rebuttalPrompt: (opponentLabel: ParticipantName, opponentResponse: string) => string;
+  roundTaskPrompt?: () => string;
 }
 
 export type SynthesisPromptBuilder = (
@@ -38,12 +40,68 @@ const KNOWN_PROVIDER_LABELS: Record<string, string> = {
 };
 
 function providerLabel(provider: ProviderName): string {
+  if (provider.startsWith('ollama')) {
+    return 'Ollama';
+  }
   return KNOWN_PROVIDER_LABELS[provider] ?? provider;
 }
 
 function participantLabel(label: ParticipantName): string {
   if (label === 'user') return 'User';
   return label;
+}
+
+function buildProviderResearchGuidance(provider: ProviderName): string[] {
+  if (provider === 'codex') {
+    return [
+      'Research Guidance:',
+      '- You can use live web search in your own turn. For time-sensitive claims, search before answering.',
+      '- Prefer primary sources or direct reporting, then cite source names and dates in your reasoning.',
+      '- Separate what comes from live research from what comes from the shared evidence snapshot.',
+    ];
+  }
+
+  if (provider === 'gemini') {
+    return [
+      'Research Guidance:',
+      '- Use built-in web search/fetch for current facts, recent developments, or source verification.',
+      '- Start with short targeted searches, then fetch the most relevant primary or authoritative pages.',
+      '- Cite source names and dates, and clearly distinguish verified facts from your inference.',
+    ];
+  }
+
+  if (provider === 'claude') {
+    return [
+      'Research Guidance:',
+      '- Use available web/MCP search tools for current facts before making time-sensitive claims.',
+      '- If web/MCP tools are unavailable in this run, say so briefly and fall back to the shared evidence snapshot.',
+      '- Cite source names and dates, and keep unsupported speculation clearly labeled as inference.',
+    ];
+  }
+
+  if (provider.startsWith('ollama')) {
+    return [
+      'Research Guidance:',
+      '- If callable web tools are available in this run, use them for current facts instead of guessing.',
+      '- Do not claim live web access unless a tool result is explicitly present in the prompt.',
+      '- Treat any shared evidence snapshot as the authoritative external research context for this debate.',
+      '- If evidence is missing, reason from the supplied context and label uncertainty explicitly.',
+    ];
+  }
+
+  return [];
+}
+
+function normalizeEvidenceKind(kind?: EvidenceKind): EvidenceKind {
+  return kind === 'web' ? 'web' : 'news';
+}
+
+function evidenceKindLabel(kind?: EvidenceKind): string {
+  return normalizeEvidenceKind(kind) === 'web' ? '웹' : '뉴스';
+}
+
+function evidenceKindEnglishLabel(kind?: EvidenceKind): string {
+  return normalizeEvidenceKind(kind) === 'web' ? 'Web' : 'News';
 }
 
 function buildOtherParticipantSummary(
@@ -85,6 +143,51 @@ export function buildDebaterSystemPrompt(
     '6. Respond in the same language as the question.',
     '7. Stay inside your assigned role. Do not collapse into a generic neutral answer.',
   ];
+  const researchGuidance = buildProviderResearchGuidance(participant.provider);
+  if (researchGuidance.length > 0) {
+    lines.push('', ...researchGuidance);
+  }
+
+  if (projectContext) {
+    lines.push('', '---', '', projectContext);
+  }
+
+  return lines.join('\n');
+}
+
+export function buildDiscussionSystemPrompt(
+  participant: DebateParticipant,
+  projectContext?: string,
+  participants?: DebateParticipant[],
+): string {
+  const self = participant.label;
+  const provider = providerLabel(participant.provider);
+  const otherParticipants = buildOtherParticipantSummary(participant, participants);
+  const rolePrompt = buildParticipantRolePrompt(participant.role);
+
+  const lines = [
+    `You are ${self}, participating in a structured collaborative discussion with ${otherParticipants}.`,
+    `Your underlying model/provider is ${provider}.`,
+    '',
+    rolePrompt,
+    '',
+    'Your goal is to help the group reach a practical, well-reasoned recommendation.',
+    '',
+    'Rules:',
+    '1. Start from your assigned role and domain lens.',
+    '2. Build on useful points from other participants instead of treating the exchange as winner-takes-all.',
+    '3. When you disagree, make the trade-off explicit and explain what evidence or assumption drives the difference.',
+    '4. Surface risks, open questions, and implementation implications when relevant.',
+    '5. Prefer concrete recommendations and next steps over abstract commentary.',
+    '6. Be concise but thorough. Aim for 200-400 words per response.',
+    '7. Use a professional, respectful tone.',
+    '8. Respond in the same language as the question.',
+    '9. Stay inside your assigned role. Do not collapse into a generic neutral answer.',
+  ];
+  const researchGuidance = buildProviderResearchGuidance(participant.provider);
+  if (researchGuidance.length > 0) {
+    lines.push('', ...researchGuidance);
+  }
 
   if (projectContext) {
     lines.push('', '---', '', projectContext);
@@ -119,6 +222,40 @@ export function buildRebuttalPrompt(
     '1. Addressing their key points (agree or rebut with evidence)',
     '2. Strengthening your own position',
     '3. Identifying any gaps or weaknesses in their reasoning',
+  ].join('\n');
+}
+
+export function buildDiscussionOpeningPrompt(question: string): string {
+  return [
+    'A group is discussing the following question:',
+    '',
+    `"${question}"`,
+    '',
+    'Please provide your initial contribution to the discussion. Include:',
+    '1. Your current recommendation, hypothesis, or framing',
+    '2. The main reasons behind it',
+    '3. The biggest risks, caveats, or unknowns',
+    '4. What you want the other participants to examine next',
+  ].join('\n');
+}
+
+export function buildDiscussionRebuttalPrompt(
+  opponentProvider: ParticipantName,
+  opponentResponse: string,
+): string {
+  const opponent = participantLabel(opponentProvider);
+  return [
+    `${opponent} has shared the following contribution:`,
+    '',
+    '---',
+    opponentResponse,
+    '---',
+    '',
+    'Please continue the discussion by:',
+    '1. Identifying what is useful or correct in their contribution',
+    '2. Clarifying where you differ and why',
+    '3. Refining the emerging recommendation with your own perspective',
+    '4. Naming unresolved questions, decision criteria, or next steps',
   ].join('\n');
 }
 
@@ -163,6 +300,71 @@ export function buildSynthesisPrompt(
     '3. Identify areas where one side had stronger reasoning.',
     '4. Provide a final, balanced answer to the original question that incorporates the best insights from all perspectives.',
     '5. Respond in the same language as the original question.',
+  ].join('\n');
+}
+
+export function buildDiscussionSynthesisPrompt(
+  question: string,
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
+  roundStates: DebateRoundState[] = [],
+): string {
+  const transcript = debateLog
+    .map(
+      (entry) =>
+        `[Round ${entry.round} - ${participantLabel(entry.label)}]\n${entry.content}`,
+    )
+    .join('\n\n---\n\n');
+
+  const hasUser = debateLog.some((e) => e.label === 'user');
+  const discussionParticipants = [...new Set(debateLog.filter((e) => e.label !== 'user').map((e) => e.label))];
+  const providerLabels = discussionParticipants.map((p) => participantLabel(p as ParticipantName)).join(', ');
+  const participants = hasUser ? `${providerLabels}, and the User` : providerLabels;
+  const roundStateSection = roundStates.length > 0
+    ? [
+        'Compressed Discussion State:',
+        '',
+        buildRoundStateSummaryPreamble(roundStates),
+        '',
+      ]
+    : [];
+
+  return [
+    `You are a facilitator synthesizing a collaborative discussion between ${participants}.`,
+    '',
+    `Original Question: "${question}"`,
+    '',
+    ...roundStateSection,
+    'Discussion Transcript:',
+    '',
+    transcript,
+    '',
+    'Produce a clear discussion memo with these sections:',
+    '',
+    '## Shared Understanding',
+    'What the group broadly agrees on.',
+    '',
+    '## Key Trade-offs',
+    'The most important tensions, disagreements, or decision criteria.',
+    '',
+    '## Recommendation',
+    'The current best recommendation, with rationale.',
+    '',
+    '## Open Questions',
+    'What remains uncertain or needs validation.',
+    '',
+    '## Next Steps',
+    'Concrete follow-up actions, owners, or checks the team should run next.',
+    '',
+    'Respond in the same language as the original question.',
+  ].join('\n');
+}
+
+export function buildDiscussionRoundTaskPrompt(): string {
+  return [
+    'Using the compressed discussion state above, move the conversation forward.',
+    'Clarify the most important unresolved trade-offs, build on valid agreements, and propose concrete next steps.',
+    'Use the latest participant responses and any explicit user guidance as higher-priority context than older rounds.',
+    'Avoid repeating settled points unless you are correcting them.',
   ].join('\n');
 }
 
@@ -263,8 +465,6 @@ export function buildTranscriptFallbackSection(
   ].join('\n');
 }
 
-import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
-
 const MAX_ROUND_EVIDENCE_ARTICLES = 4;
 
 export function buildSynthesisPromptWithEvidence(
@@ -272,29 +472,35 @@ export function buildSynthesisPromptWithEvidence(
   debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
   snapshot?: EvidenceSnapshot,
   roundStates: DebateRoundState[] = [],
+  buildPrompt: SynthesisPromptBuilder = buildSynthesisPrompt,
 ): string {
   if (!snapshot) {
-    return buildSynthesisPrompt(question, debateLog, roundStates);
+    return buildPrompt(question, debateLog, roundStates);
   }
+
+  const kind = normalizeEvidenceKind(snapshot.kind);
+  const kindLabel = evidenceKindLabel(kind);
+  const kindEnglish = evidenceKindEnglishLabel(kind);
 
   const evidenceSection = [
     '',
-    '## 참고 증거 (Evidence Snapshot)',
-    `수집 시각: ${snapshot.collectedAt} | 검색어: "${snapshot.query}" | ID: ${snapshot.id}`,
-    '두 AI 모두 아래 동일한 기사를 참고했습니다.',
+    `## 참고 근거 (${kindLabel} Evidence Snapshot)`,
+    `수집 시각: ${snapshot.collectedAt} | 범위: ${kindEnglish} | 검색어: "${snapshot.query}" | ID: ${snapshot.id}`,
+    '모든 참가자는 아래 동일한 근거 스냅샷을 참고했습니다.',
     '',
     ...snapshot.articles.map(
       (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${a.summary}\n  URL: ${a.url}`
     ),
     '',
     '## 합성 요구사항 (Evidence 모드)',
-    '1. **출처 인용 강제**: 각 주장마다 근거 기사를 "[출처명, 날짜]" 형식으로 명시하시오.',
-    '2. **시나리오 분리**: 단기(3개월), 중기(1년), 장기(3년+) 영향을 별도 섹션으로 구분하시오.',
-    '3. **확신도 표기**: 각 예측에 높음/중간/낮음과 근거를 명시하시오.',
-    '4. **반증 조건**: "X가 발생하면 이 분석은 달라진다"를 명시하시오.',
+    '1. **출처 인용 강제**: 각 주장마다 근거 자료를 "[출처명, 날짜]" 형식으로 명시하시오.',
+    '2. **사실/해석 분리**: 근거에 직접 나온 사실과 그로부터의 추론을 구분하시오.',
+    '3. **시나리오 분리**: 단기(3개월), 중기(1년), 장기(3년+) 영향을 별도 섹션으로 구분하시오.',
+    '4. **확신도 표기**: 각 예측에 높음/중간/낮음과 근거를 명시하시오.',
+    '5. **반증 조건**: "X가 발생하면 이 분석은 달라진다"를 명시하시오.',
   ].join('\n');
 
-  return buildSynthesisPrompt(question, debateLog, roundStates) + evidenceSection;
+  return buildPrompt(question, debateLog, roundStates) + evidenceSection;
 }
 
 // --- Plan Mode Prompts ---
@@ -326,6 +532,10 @@ export function buildPlanSystemPrompt(
     '6. Use a professional, respectful tone.',
     '7. Respond in the same language as the question.',
   ];
+  const researchGuidance = buildProviderResearchGuidance(participant.provider);
+  if (researchGuidance.length > 0) {
+    lines.push('', ...researchGuidance);
+  }
 
   if (projectContext) {
     lines.push('', '---', '', projectContext);
@@ -487,23 +697,25 @@ export type RoundEvidenceMode = 'unified' | 'split-first' | 'split-second';
 export function buildRoundEvidenceSection(
   mode: RoundEvidenceMode,
   articles: NewsArticle[],
+  kind: EvidenceKind = 'news',
 ): string {
   if (articles.length === 0) return '';
 
   let selected: NewsArticle[];
   let label: string;
+  const kindLabel = evidenceKindLabel(kind);
 
   if (mode === 'unified') {
     selected = articles;
-    label = '양측 공통 증거 (unified)';
+    label = `양측 공통 근거 (${kindLabel}, unified)`;
   } else {
     const half = Math.ceil(articles.length / 2);
     if (mode === 'split-first') {
       selected = articles.slice(0, half);
-      label = '찬성 측 근거 (split)';
+      label = `찬성 측 근거 (${kindLabel}, split)`;
     } else {
       selected = articles.slice(half);
-      label = '반대 측 근거 (split)';
+      label = `반대 측 근거 (${kindLabel}, split)`;
     }
   }
 
@@ -512,8 +724,8 @@ export function buildRoundEvidenceSection(
 
   const lines = [
     '',
-    `## 참고 뉴스 (${label})`,
-    '아래 압축된 기사 메모를 근거로 활용하여 논증을 강화하십시오.',
+    `## 참고 근거 (${label})`,
+    '아래 압축된 근거 메모를 활용하여 논증을 강화하십시오.',
     '',
     ...selected.map(
       (a) => `- [${a.source}] ${a.title} (${a.publishedAt})\n  요약: ${truncateText(a.summary, 160)}`
@@ -522,7 +734,7 @@ export function buildRoundEvidenceSection(
   ];
 
   if (articles.length > selected.length) {
-    lines.push(`추가 기사 ${articles.length - selected.length}건은 컨텍스트 절약을 위해 생략되었습니다.`);
+    lines.push(`추가 근거 ${articles.length - selected.length}건은 컨텍스트 절약을 위해 생략되었습니다.`);
     lines.push('');
   }
 
@@ -537,6 +749,13 @@ export const DEBATE_PROMPTS: PromptBuilders = {
   rebuttalPrompt: buildRebuttalPrompt,
 };
 
+export const DISCUSSION_PROMPTS: PromptBuilders = {
+  systemPrompt: buildDiscussionSystemPrompt,
+  openingPrompt: buildDiscussionOpeningPrompt,
+  rebuttalPrompt: buildDiscussionRebuttalPrompt,
+  roundTaskPrompt: buildDiscussionRoundTaskPrompt,
+};
+
 export const PLAN_PROMPTS: PromptBuilders = {
   systemPrompt: buildPlanSystemPrompt,
   openingPrompt: buildPlanOpeningPrompt,
@@ -544,11 +763,15 @@ export const PLAN_PROMPTS: PromptBuilders = {
 };
 
 export function getPromptBuilders(mode: DebateMode): PromptBuilders {
-  return mode === 'plan' ? PLAN_PROMPTS : DEBATE_PROMPTS;
+  if (mode === 'plan') return PLAN_PROMPTS;
+  if (mode === 'discussion') return DISCUSSION_PROMPTS;
+  return DEBATE_PROMPTS;
 }
 
 export function getSynthesisPromptBuilder(mode: DebateMode): SynthesisPromptBuilder {
-  return mode === 'plan' ? buildPlanSynthesisPrompt : buildSynthesisPrompt;
+  if (mode === 'plan') return buildPlanSynthesisPrompt;
+  if (mode === 'discussion') return buildDiscussionSynthesisPrompt;
+  return buildSynthesisPrompt;
 }
 
 export function getApplyPromptBuilder(_mode: DebateMode): ApplyPromptBuilder {

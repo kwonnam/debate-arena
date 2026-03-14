@@ -54,4 +54,36 @@ describe('EvidenceBuilder', () => {
     const snapshot = await builder.build('query');
     expect(snapshot.sources).toContain('Brave');
   });
+
+  it('kind 옵션이 있으면 snapshot kind와 id 계산에 반영한다', async () => {
+    const provider: NewsProvider = { name: 'Brave Web', search: vi.fn().mockResolvedValue([makeArticle('url1')]) };
+    const builder = new EvidenceBuilder([provider]);
+    const newsSnapshot = await builder.build('query', { kind: 'news' });
+    const webSnapshot = await builder.build('query', { kind: 'web' });
+
+    expect(newsSnapshot.kind).toBe('news');
+    expect(webSnapshot.kind).toBe('web');
+    expect(newsSnapshot.id).not.toBe(webSnapshot.id);
+  });
+
+  it('searchPlan이 있으면 언어별 쿼리를 모두 실행한다', async () => {
+    const search = vi.fn().mockResolvedValue([makeArticle('url1')]);
+    const p1: NewsProvider = { name: 'Brave', search };
+    const builder = new EvidenceBuilder([p1]);
+
+    await builder.build('query', {
+      searchPlan: {
+        detectedLanguage: 'ko',
+        llmApplied: true,
+        queries: [
+          { query: '반도체 수출 규제', language: 'ko', source: 'expanded' },
+          { query: 'chip export restrictions', language: 'en', source: 'expanded' },
+        ],
+      },
+    });
+
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(search).toHaveBeenNthCalledWith(1, '반도체 수출 규제', expect.objectContaining({ language: 'ko' }));
+    expect(search).toHaveBeenNthCalledWith(2, 'chip export restrictions', expect.objectContaining({ language: 'en' }));
+  });
 });

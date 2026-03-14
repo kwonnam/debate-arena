@@ -1,17 +1,31 @@
 import type { NewsProvider, SearchOptions } from './providers/types.js';
-import type { EvidenceSnapshot, NewsArticle } from './snapshot.js';
-import { createSnapshotId } from './snapshot.js';
+import type { EvidenceKind, EvidenceSnapshot, NewsArticle } from './snapshot.js';
+import { createSnapshotId, normalizeEvidenceKind } from './snapshot.js';
+import type { SearchPlan, SearchQueryVariant } from './search-plan.js';
 
 export class EvidenceBuilder {
   constructor(private providers: NewsProvider[]) {}
 
-  async build(query: string, options?: SearchOptions & { deduplication?: boolean }): Promise<EvidenceSnapshot> {
+  async build(
+    query: string,
+    options?: SearchOptions & { deduplication?: boolean; searchPlan?: SearchPlan; kind?: EvidenceKind },
+  ): Promise<EvidenceSnapshot> {
     const maxArticles = options?.maxArticles ?? 10;
     const deduplication = options?.deduplication ?? true;
+    const kind = normalizeEvidenceKind(options?.kind);
+    const searchQueries = resolveSearchQueries(query, options);
 
     // 1. 모든 provider에서 병렬 수집
     const results = await Promise.allSettled(
-      this.providers.map((p) => p.search(query, options))
+      searchQueries.flatMap((searchQuery) =>
+        this.providers.map((provider) =>
+          provider.search(searchQuery.query, {
+            maxArticles,
+            freshness: options?.freshness,
+            language: searchQuery.language ?? options?.language,
+          }),
+        ),
+      ),
     );
 
     const allArticles: NewsArticle[] = [];
@@ -45,15 +59,64 @@ export class EvidenceBuilder {
       .slice(0, maxArticles);
 
     // 4. SHA-256 해시 ID
-    const id = createSnapshotId(query, sorted.map((a) => a.url));
+    const id = createSnapshotId(query, sorted.map((a) => a.url), kind);
 
     return {
       id,
+      kind,
       query,
       collectedAt: new Date().toISOString(),
       sources: this.providers.map((p) => p.name),
       articles: sorted,
       excludedCount,
+      searchPlan: options?.searchPlan ?? {
+        detectedLanguage: options?.language === 'ko' || options?.language === 'en' ? options.language : 'other',
+        llmApplied: false,
+        queries: searchQueries,
+      },
     };
   }
+}
+
+function resolveSearchQueries(
+  query: string,
+  options?: SearchOptions & { searchPlan?: SearchPlan },
+): SearchQueryVariant[] {
+  const fromPlan = options?.searchPlan?.queries
+    ?.map((item) => ({
+      query: String(item.query ?? '').trim(),
+      language: item.language,
+      source: item.source ?? 'original',
+    }))
+    .filter((item) => Boolean(item.query));
+
+  if (fromPlan && fromPlan.length > 0) {
+    return dedupeQueries(fromPlan);
+  }
+
+  return [{
+    query,
+    language: options?.language === 'ko' || options?.language === 'en' ? options.language : undefined,
+    source: 'original',
+  }];
+}
+
+function dedupeQueries(queries: SearchQueryVariant[]): SearchQueryVariant[] {
+  const seen = new Set<string>();
+  const unique: SearchQueryVariant[] = [];
+
+  for (const query of queries) {
+    const normalizedQuery = query.query.trim();
+    if (!normalizedQuery) continue;
+
+    const key = `${query.language ?? 'auto'}::${normalizedQuery.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({
+      ...query,
+      query: normalizedQuery,
+    });
+  }
+
+  return unique;
 }

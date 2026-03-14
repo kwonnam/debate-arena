@@ -9,18 +9,28 @@ import { readdir, readFile, unlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { collectEvidence } from '../news/index.js';
-import type { EvidenceSnapshot } from '../news/snapshot.js';
+import type { EvidenceKind, EvidenceSnapshot } from '../news/snapshot.js';
 import { summarizeSnapshot } from '../news/snapshot.js';
-import type { DebateOptions, ProviderName, WorkflowKind } from '../types/debate.js';
-import type { DebateEventEnvelope } from '../types/debate-events.js';
+import type { QueryTransformMode, SearchLanguageScope } from '../news/search-plan.js';
+import type { DebateMode, DebateOptions, ProviderName, WorkflowKind } from '../types/debate.js';
+import type { DebateEvent, DebateEventEnvelope } from '../types/debate-events.js';
 import type { DebateParticipant, DebateParticipantRole } from '../types/roles.js';
 import { DebateOrchestrator } from '../core/orchestrator.js';
 import { normalizeDebateParticipants } from '../core/participants.js';
+import { buildFollowUpContext } from '../core/follow-up.js';
+import { buildResumePlan, hydrateParticipantsForResume } from '../core/resume.js';
 import { InMemorySessionStore, type SessionStore } from '../core/session-store.js';
 import { collectProjectContext } from '../core/project-context.js';
 import { createProviderMap, listProviderModels, listProviderOptions } from '../providers/factory.js';
 import { createSilentCallbacks } from '../ui/renderer.js';
 import { EventHub } from './event-hub.js';
+import {
+  getDashboardLogPath,
+  getSessionLogPath,
+  logDashboard,
+  logSession,
+  readLogTail,
+} from './runtime-log.js';
 import { DEFAULT_DASHBOARD_CONFIG, DEFAULT_NEWS_CONFIG, type NewsConfig } from '../config/defaults.js';
 import {
   applyValidationResult,
@@ -50,6 +60,7 @@ interface DebateExecutionInput {
   question?: string;
   rounds?: number;
   judge?: ProviderName | 'both';
+  mode?: DebateMode;
   participants?: DebateParticipantInput[];
   noContext?: boolean;
   executionCwd?: string;
@@ -57,6 +68,7 @@ interface DebateExecutionInput {
   snapshotId?: string;
   workflowKind?: WorkflowKind;
   ollamaModel?: string;
+  previousSessionId?: string;
 }
 
 interface ExecuteRequestBody {
@@ -90,7 +102,7 @@ interface DebateParticipantInput {
 }
 
 const EXECUTION_ALLOWLIST = new Set<ExecuteCommand>(['run_debate']);
-const DEFAULT_EXECUTION_TIMEOUT_MS = 15 * 60 * 1000;
+const DEFAULT_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 const MIN_EXECUTION_TIMEOUT_MS = 30 * 1000;
 const MAX_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_CONCURRENT_SESSIONS = 2;
@@ -106,11 +118,36 @@ class DashboardSessionStore implements SessionStore {
 
   create(sessionId: string, metadata: Parameters<SessionStore['create']>[1]): void {
     this.store.create(sessionId, metadata);
+    logDashboard('INFO', 'session_created', {
+      sessionId,
+      question: metadata.question,
+      workflowKind: metadata.workflowKind,
+      rounds: metadata.rounds,
+      judge: metadata.judge,
+      participants: metadata.participants.map((participant) => ({
+        id: participant.id,
+        provider: participant.provider,
+      })),
+      executionCwd: metadata.executionCwd,
+    });
+    logSession(sessionId, 'INFO', 'session_created', {
+      workflowKind: metadata.workflowKind,
+      rounds: metadata.rounds,
+      judge: metadata.judge,
+      question: metadata.question,
+      executionCwd: metadata.executionCwd,
+      evidenceId: metadata.evidence?.id,
+    });
   }
 
   append(sessionId: string, event: Parameters<SessionStore['append']>[1]): DebateEventEnvelope {
     const envelope = this.store.append(sessionId, event);
     this.hub.publish(envelope);
+    if (event.type !== 'agent_chunk') {
+      const eventSummary = summarizeEventForLog(event);
+      logDashboard('DEBUG', 'session_event', { sessionId, ...eventSummary });
+      logSession(sessionId, 'DEBUG', 'session_event', eventSummary);
+    }
     return envelope;
   }
 
@@ -124,10 +161,14 @@ class DashboardSessionStore implements SessionStore {
 
   delete(sessionId: string): void {
     this.store.delete(sessionId);
+    logDashboard('INFO', 'session_deleted', { sessionId });
+    logSession(sessionId, 'INFO', 'session_deleted');
   }
 
   updateStatus(sessionId: string, status: Parameters<SessionStore['updateStatus']>[1]): void {
     this.store.updateStatus(sessionId, status);
+    logDashboard('INFO', 'session_status_changed', { sessionId, status });
+    logSession(sessionId, 'INFO', 'session_status_changed', { status });
   }
 }
 
@@ -159,6 +200,8 @@ export function stopDashboardRuntime(options?: {
     if (!entry.controller.signal.aborted) {
       entry.controller.abort(reason);
       stoppedSessions += 1;
+      logDashboard('WARN', 'session_abort_requested', { sessionId, reason });
+      logSession(sessionId, 'WARN', 'session_abort_requested', { reason });
     }
     runningSessions.delete(sessionId);
   }
@@ -168,6 +211,7 @@ export function stopDashboardRuntime(options?: {
     serverInstance.close();
     serverInstance = null;
     serverStopped = true;
+    logDashboard('INFO', 'dashboard_server_stopped', { reason, stoppedSessions });
   }
 
   return { stoppedSessions, serverStopped };
@@ -175,6 +219,7 @@ export function stopDashboardRuntime(options?: {
 
 export function startDashboardServer(): { url: string; port: number; close: () => void } {
   if (serverInstance) {
+    logDashboard('INFO', 'dashboard_server_reused', { port: DEFAULT_DASHBOARD_CONFIG.port });
     return { url: getBaseUrl(DEFAULT_DASHBOARD_CONFIG.port), port: DEFAULT_DASHBOARD_CONFIG.port, close: serverInstance.close };
   }
 
@@ -187,12 +232,22 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     if (!entry) return;
     clearTimeout(entry.timeoutTimer);
     runningSessions.delete(sessionId);
+    logDashboard('DEBUG', 'session_runtime_cleaned', {
+      sessionId,
+      elapsedMs: Date.now() - entry.startedAt,
+      timeoutMs: entry.timeoutMs,
+    });
+    logSession(sessionId, 'DEBUG', 'session_runtime_cleaned', {
+      elapsedMs: Date.now() - entry.startedAt,
+      timeoutMs: entry.timeoutMs,
+    });
   };
 
   const parseDebateInput = (input: DebateExecutionInput): {
     question: string;
     rounds: number;
     judge: ProviderName | 'both';
+    mode: DebateMode;
     participants?: DebateParticipant[];
     noContext: boolean;
     executionCwd?: string;
@@ -206,6 +261,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
     const rounds = clampInteger(input.rounds, 1, 8, 3);
     const judge = parseJudge(input.judge) ?? 'claude';
+    const mode = parseDebateMode(input.mode) ?? 'debate';
     const participants = parseParticipants(input.participants);
     if (input.participants && !participants) {
       return null;
@@ -220,6 +276,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       question,
       rounds,
       judge,
+      mode,
       participants,
       noContext,
       executionCwd: executionCwd || undefined,
@@ -228,13 +285,40 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     };
   };
 
-  const runDebateFromInput = async (
-    input: DebateExecutionInput,
+  const loadSnapshotById = async (snapshotId?: string): Promise<EvidenceSnapshot | undefined> => {
+    if (!snapshotId || !/^[\w-]{1,64}$/.test(snapshotId)) {
+      return undefined;
+    }
+
+    try {
+      const snapPath = join(SNAPSHOT_DIR, `snap-${snapshotId}.json`);
+      if (!resolve(snapPath).startsWith(resolve(SNAPSHOT_DIR))) {
+        return undefined;
+      }
+
+      const raw = await readFile(snapPath, 'utf-8');
+      return JSON.parse(raw) as EvidenceSnapshot;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const startDebateRun = (
+    providerMap: ReturnType<typeof createProviderMap>,
+    options: DebateOptions,
+    participantProviders: string[],
     timeoutMsRaw?: number,
-  ): Promise<
-    | { ok: true; sessionId: string; timeoutMs: number }
-    | { ok: false; status: 400 | 429; error: string }
-  > => {
+  ): (
+    | {
+      ok: true;
+      sessionId: string;
+      timeoutMs: number;
+      resumedFromSessionId?: string;
+      resumeStage?: string;
+      continuedFromSessionId?: string;
+    }
+    | { ok: false; status: 429; error: string }
+  ) => {
     if (runningSessions.size >= MAX_CONCURRENT_SESSIONS) {
       return {
         ok: false,
@@ -243,6 +327,154 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       };
     }
 
+    const timeoutMs = normalizeTimeoutMs(timeoutMsRaw);
+    const controller = new AbortController();
+    const sessionId = randomUUID();
+    const runOptions: DebateOptions = {
+      ...options,
+      sessionId,
+      signal: controller.signal,
+    };
+
+    logDashboard('INFO', 'debate_request_accepted', {
+      sessionId,
+      rounds: runOptions.rounds,
+      judge: runOptions.judge,
+      workflowKind: runOptions.workflowKind,
+      participantProviders,
+      executionCwd: runOptions.executionCwd,
+      timeoutMs,
+      snapshotId: runOptions.snapshot?.id,
+      resumedFromSessionId: runOptions.resumeFromSessionId,
+      resumeStage: runOptions.resumeStage,
+      continuedFromSessionId: runOptions.continuedFromSessionId,
+    });
+    logSession(sessionId, 'INFO', 'debate_request_accepted', {
+      rounds: runOptions.rounds,
+      judge: runOptions.judge,
+      workflowKind: runOptions.workflowKind,
+      participantProviders,
+      executionCwd: runOptions.executionCwd,
+      timeoutMs,
+      snapshotId: runOptions.snapshot?.id,
+      resumedFromSessionId: runOptions.resumeFromSessionId,
+      resumeStage: runOptions.resumeStage,
+      continuedFromSessionId: runOptions.continuedFromSessionId,
+    });
+
+    const timeoutTimer = setTimeout(() => {
+      const running = runningSessions.get(sessionId);
+      if (!running || running.controller.signal.aborted) return;
+      logDashboard('WARN', 'session_timeout_triggered', {
+        sessionId,
+        elapsedMs: Date.now() - running.startedAt,
+        timeoutMs: running.timeoutMs,
+      });
+      logSession(sessionId, 'WARN', 'session_timeout_triggered', {
+        elapsedMs: Date.now() - running.startedAt,
+        timeoutMs: running.timeoutMs,
+      });
+      running.controller.abort('timeout');
+    }, timeoutMs);
+    timeoutTimer.unref();
+
+    runningSessions.set(sessionId, {
+      controller,
+      startedAt: Date.now(),
+      timeoutMs,
+      timeoutTimer,
+    });
+
+    const orchestrator = new DebateOrchestrator(
+      providerMap,
+      sessionStore,
+      undefined,
+      (message, meta) => {
+        logDashboard('DEBUG', message, meta);
+        const sessionLogId = typeof meta?.sessionId === 'string' ? meta.sessionId : sessionId;
+        logSession(sessionLogId, 'DEBUG', message, meta);
+      },
+    );
+
+    orchestrator
+      .run(runOptions, createSilentCallbacks())
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logDashboard('ERROR', 'debate_run_rejected', { sessionId, error: message });
+        logSession(sessionId, 'ERROR', 'debate_run_rejected', { error: message });
+        return null;
+      })
+      .finally(() => {
+        cleanupRunSession(sessionId);
+      });
+
+    return {
+      ok: true,
+      sessionId,
+      timeoutMs,
+      resumedFromSessionId: runOptions.resumeFromSessionId,
+      resumeStage: runOptions.resumeStage,
+      continuedFromSessionId: runOptions.continuedFromSessionId,
+    };
+  };
+
+  const loadPreviousDebateContext = (
+    sourceSessionId?: string,
+  ): (
+    | { ok: true; previousDebate?: DebateOptions['previousDebate'] }
+    | { ok: false; status: 400 | 404 | 409; error: string }
+  ) => {
+    const normalizedId = typeof sourceSessionId === 'string' ? sourceSessionId.trim() : '';
+    if (!normalizedId) {
+      return { ok: true };
+    }
+
+    if (!/^[\w.-]{1,80}$/.test(normalizedId)) {
+      return { ok: false, status: 400, error: 'Invalid previousSessionId' };
+    }
+
+    const sourceSession = sessionStore.get(normalizedId);
+    if (!sourceSession) {
+      return { ok: false, status: 404, error: 'Previous session not found' };
+    }
+
+    if (runningSessions.has(normalizedId)) {
+      return { ok: false, status: 409, error: 'The selected previous session is still running.' };
+    }
+
+    if (sourceSession.status !== 'COMPLETED') {
+      return {
+        ok: false,
+        status: 409,
+        error: `Only COMPLETED sessions can seed a follow-up debate (current: ${sourceSession.status}).`,
+      };
+    }
+
+    try {
+      return { ok: true, previousDebate: buildFollowUpContext(sourceSession) };
+    } catch (error) {
+      return {
+        ok: false,
+        status: 409,
+        error: error instanceof Error ? error.message : 'Previous session cannot seed a follow-up debate.',
+      };
+    }
+  };
+
+  const runDebateFromInput = async (
+    input: DebateExecutionInput,
+    timeoutMsRaw?: number,
+  ): Promise<
+    | {
+      ok: true;
+      sessionId: string;
+      timeoutMs: number;
+      resumedFromSessionId?: string;
+      resumeStage?: string;
+      continuedFromSessionId?: string;
+    }
+    | { ok: false; status: 400 | 404 | 409 | 429; error: string }
+  > => {
     const parsed = parseDebateInput(input);
     if (!parsed) {
       return { ok: false, status: 400, error: 'Invalid debate input payload' };
@@ -260,32 +492,17 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
     const questionWithAttachments = mergeQuestionWithAttachments(parsed.question, parsed.attachments);
 
-    // Load snapshot if snapshotId is provided
-    let snapshot: EvidenceSnapshot | undefined;
-    if (input.snapshotId && /^[\w-]{1,64}$/.test(input.snapshotId)) {
-      try {
-        const snapPath = join(SNAPSHOT_DIR, `snap-${input.snapshotId}.json`);
-        if (resolve(snapPath).startsWith(resolve(SNAPSHOT_DIR))) {
-          const raw = await readFile(snapPath, 'utf-8');
-          snapshot = JSON.parse(raw) as EvidenceSnapshot;
-        }
-      } catch {
-        // snapshot not found — proceed without it
-      }
+    const snapshot = await loadSnapshotById(input.snapshotId);
+    const previousDebateResult = loadPreviousDebateContext(input.previousSessionId);
+    if (!previousDebateResult.ok) {
+      return previousDebateResult;
     }
 
-    const workflowKind = input.workflowKind ?? (snapshot ? 'news' : 'general');
+    const workflowKind = input.workflowKind
+      ?? (snapshot?.kind === 'news' ? 'news' : 'general');
     const providerWorkflowError = validateWorkflowProviders(workflowKind, parsed.participants, parsed.judge);
     if (providerWorkflowError) {
       return { ok: false, status: 400, error: providerWorkflowError };
-    }
-
-    if (workflowKind === 'news' && usesOllama(parsed.participants, parsed.judge) && !parsed.ollamaModel) {
-      return {
-        ok: false,
-        status: 400,
-        error: 'News workflow requires an Ollama model when Ollama is selected.',
-      };
     }
 
     let providerMap: ReturnType<typeof createProviderMap>;
@@ -301,53 +518,136 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       };
     }
 
-    const timeoutMs = normalizeTimeoutMs(timeoutMsRaw);
-    const controller = new AbortController();
-    const sessionId = randomUUID();
-    const timeoutTimer = setTimeout(() => {
-      const running = runningSessions.get(sessionId);
-      if (!running || running.controller.signal.aborted) return;
-      running.controller.abort('timeout');
-    }, timeoutMs);
-    timeoutTimer.unref();
+    return startDebateRun(
+      providerMap,
+      {
+        question: questionWithAttachments,
+        rounds: parsed.rounds,
+        stream: true,
+        synthesis: true,
+        judge: parsed.judge,
+        format: 'pretty',
+        mode: parsed.mode,
+        interactive: false,
+        participants: parsed.participants,
+        executionCwd,
+        projectContext,
+        noContext: parsed.noContext,
+        attachments: parsed.attachments,
+        snapshot,
+        workflowKind,
+        ollamaModel: parsed.ollamaModel,
+        previousDebate: previousDebateResult.previousDebate,
+        continuedFromSessionId: previousDebateResult.previousDebate?.sourceSessionId,
+      },
+      (parsed.participants ?? []).map((participant) => participant.provider),
+      timeoutMsRaw,
+    );
+  };
 
-    runningSessions.set(sessionId, {
-      controller,
-      startedAt: Date.now(),
-      timeoutMs,
-      timeoutTimer,
-    });
+  const resumeDebateSession = async (
+    sourceSessionId: string,
+    timeoutMsRaw?: number,
+  ): Promise<
+    | {
+      ok: true;
+      sessionId: string;
+      timeoutMs: number;
+      resumedFromSessionId?: string;
+      resumeStage?: string;
+      continuedFromSessionId?: string;
+    }
+    | { ok: false; status: 400 | 404 | 409 | 429; error: string }
+  > => {
+    const sourceSession = sessionStore.get(sourceSessionId);
+    if (!sourceSession) {
+      return { ok: false, status: 404, error: 'Session not found' };
+    }
 
-    const options: DebateOptions = {
-      sessionId,
-      question: questionWithAttachments,
-      rounds: parsed.rounds,
-      stream: true,
-      synthesis: true,
-      judge: parsed.judge,
-      format: 'pretty',
-      mode: 'debate',
-      interactive: false,
-      participants: parsed.participants,
-      signal: controller.signal,
-      executionCwd,
-      projectContext,
-      attachments: parsed.attachments,
-      snapshot,
-      workflowKind,
-      ollamaModel: parsed.ollamaModel,
-    };
+    if (runningSessions.has(sourceSessionId)) {
+      return { ok: false, status: 409, error: 'The selected session is still running.' };
+    }
 
-    const orchestrator = new DebateOrchestrator(providerMap, sessionStore);
+    if (sourceSession.status !== 'FAILED' && sourceSession.status !== 'CANCELLED') {
+      return {
+        ok: false,
+        status: 409,
+        error: `Only FAILED or CANCELLED sessions can be resumed (current: ${sourceSession.status}).`,
+      };
+    }
 
-    orchestrator
-      .run(options, createSilentCallbacks())
-      .catch(() => null)
-      .finally(() => {
-        cleanupRunSession(sessionId);
+    let resumePlan: ReturnType<typeof buildResumePlan>;
+    try {
+      resumePlan = buildResumePlan(sourceSession);
+    } catch (error) {
+      return {
+        ok: false,
+        status: 409,
+        error: error instanceof Error ? error.message : 'Session cannot be resumed.',
+      };
+    }
+
+    const executionCwdResult = resolveExecutionCwd(sourceSession.metadata.executionCwd);
+    if (!executionCwdResult.ok) {
+      return { ok: false, status: 400, error: executionCwdResult.error };
+    }
+    const executionCwd = executionCwdResult.cwd;
+
+    const participants = hydrateParticipantsForResume(sourceSession.metadata);
+    const snapshot = await loadSnapshotById(sourceSession.metadata.evidence?.id);
+    const workflowKind = sourceSession.metadata.workflowKind
+      ?? (snapshot?.kind === 'news' ? 'news' : 'general');
+    const judge = parseJudge(sourceSession.metadata.judge) ?? 'claude';
+    const providerWorkflowError = validateWorkflowProviders(workflowKind, participants, judge);
+    if (providerWorkflowError) {
+      return { ok: false, status: 400, error: providerWorkflowError };
+    }
+
+    let providerMap: ReturnType<typeof createProviderMap>;
+    try {
+      providerMap = createProviderMap(participants, judge, {
+        ollamaModel: sourceSession.metadata.ollamaModel,
       });
+    } catch (error) {
+      return {
+        ok: false,
+        status: 400,
+        error: error instanceof Error ? error.message : 'Provider configuration error',
+      };
+    }
 
-    return { ok: true, sessionId, timeoutMs };
+    const projectContext = sourceSession.metadata.noContext
+      ? undefined
+      : await collectProjectContext({ cwd: executionCwd });
+
+    return startDebateRun(
+      providerMap,
+      {
+        question: sourceSession.metadata.question,
+        rounds: sourceSession.metadata.rounds,
+        stream: true,
+        synthesis: true,
+        judge,
+        format: 'pretty',
+        mode: sourceSession.metadata.mode ?? 'debate',
+        interactive: false,
+        participants,
+        executionCwd,
+        projectContext,
+        noContext: sourceSession.metadata.noContext,
+        attachments: sourceSession.metadata.attachments ?? [],
+        snapshot,
+        workflowKind,
+        ollamaModel: sourceSession.metadata.ollamaModel,
+        initialMessages: resumePlan.initialMessages,
+        initialRoundStates: resumePlan.initialRoundStates,
+        resumeFromRound: resumePlan.startRound,
+        resumeFromSessionId: sourceSession.metadata.sessionId,
+        resumeStage: resumePlan.resumeStage,
+      },
+      participants.map((participant) => participant.provider),
+      timeoutMsRaw,
+    );
   };
 
   const app = new Hono();
@@ -355,6 +655,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
   const dashboardDir = resolveDashboardDir();
   const dashboardIndex = readFileSync(join(dashboardDir, 'index.html'), 'utf-8');
+  logDashboard('INFO', 'dashboard_assets_resolved', { dashboardDir, logFile: getDashboardLogPath() });
   app.get('/', (c: Context) => c.html(dashboardIndex));
   app.use('/*', serveStatic({ root: dashboardDir }));
 
@@ -406,7 +707,15 @@ export function startDashboardServer(): { url: string; port: number; close: () =
   });
 
   app.post('/api/snapshots/collect', async (c: Context) => {
-    let body: { query?: string; newsMode?: string; sources?: string[] };
+    let body: {
+      query?: string;
+      kind?: string;
+      scope?: string;
+      newsMode?: string;
+      sources?: string[];
+      queryTransformMode?: string;
+      queryLanguageScope?: string;
+    };
     try {
       body = await c.req.json();
     } catch {
@@ -416,10 +725,34 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     if (!query) {
       return c.json({ error: 'query is required' }, 400);
     }
-    const newsConfig = createNewsConfig(body.sources);
+    const evidenceKind = parseEvidenceKind(body.kind ?? body.scope);
+    const newsConfig = createNewsConfig(body.sources, evidenceKind);
+    const queryTransformMode = parseQueryTransformMode(body.queryTransformMode);
+    const queryLanguageScope = parseSearchLanguageScope(body.queryLanguageScope);
+    logDashboard('INFO', 'snapshot_collect_requested', {
+      query,
+      kind: evidenceKind,
+      sources: body.sources,
+      queryTransformMode,
+      queryLanguageScope,
+    });
     try {
-      const snapshot = await collectEvidence(query, { snapshotDir: SNAPSHOT_DIR }, newsConfig);
+      const snapshot = await collectEvidence(query, {
+        kind: evidenceKind,
+        snapshotDir: SNAPSHOT_DIR,
+        queryTransform: {
+          mode: queryTransformMode,
+          languageScope: queryLanguageScope,
+        },
+      }, newsConfig);
       const summary = summarizeSnapshot(snapshot);
+      logDashboard('INFO', 'snapshot_collect_completed', {
+        query,
+        kind: summary.kind,
+        snapshotId: summary.id,
+        articleCount: summary.articleCount,
+        sourceCount: summary.sources.length,
+      });
       return c.json({
         ...summary,
         snapshotId: summary.id,
@@ -427,6 +760,11 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to collect evidence';
+      logDashboard('ERROR', 'snapshot_collect_failed', {
+        query,
+        kind: evidenceKind,
+        error: message,
+      });
       return c.json({ error: message }, 500);
     }
   });
@@ -532,6 +870,30 @@ export function startDashboardServer(): { url: string; port: number; close: () =
   app.get('/api/runtime', (c: Context) => {
     return c.json({
       cwd: process.cwd(),
+      dashboardLogPath: getDashboardLogPath(),
+    });
+  });
+
+  app.get('/api/logs/dashboard', (c: Context) => {
+    const lines = clampInteger(Number(c.req.query('lines') ?? '200'), 1, 1000, 200);
+    const path = getDashboardLogPath();
+    return c.json({
+      path,
+      lines: readLogTail(path, lines),
+    });
+  });
+
+  app.get('/api/logs/sessions/:id', (c: Context) => {
+    const sessionId = c.req.param('id');
+    if (!/^[\w.-]{1,80}$/.test(sessionId)) {
+      return c.json({ error: 'Invalid session ID' }, 400);
+    }
+
+    const lines = clampInteger(Number(c.req.query('lines') ?? '200'), 1, 1000, 200);
+    const path = getSessionLogPath(sessionId);
+    return c.json({
+      path,
+      lines: readLogTail(path, lines),
     });
   });
 
@@ -592,7 +954,76 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       return c.json({ error: 'Session not running here' }, 404);
     }
     entry.controller.abort('user_cancelled');
+    logDashboard('WARN', 'session_stop_requested', { sessionId });
+    logSession(sessionId, 'WARN', 'session_stop_requested');
     return c.json({ ok: true });
+  });
+
+  app.post('/api/sessions/:id/resume', async (c: Context) => {
+    const sessionId = c.req.param('id');
+    let body: { timeoutMs?: number } = {};
+
+    try {
+      body = await c.req.json<{ timeoutMs?: number }>();
+    } catch {
+      // Allow empty body.
+    }
+
+    const result = await resumeDebateSession(sessionId, body.timeoutMs);
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status);
+    }
+
+    return c.json({
+      ok: true,
+      sessionId: result.sessionId,
+      timeoutMs: result.timeoutMs,
+      resumedFromSessionId: result.resumedFromSessionId,
+      resumeStage: result.resumeStage,
+      continuedFromSessionId: result.continuedFromSessionId,
+    });
+  });
+
+  app.post('/api/sessions/:id/follow-up', async (c: Context) => {
+    const sessionId = c.req.param('id');
+    const sourceSession = sessionStore.get(sessionId);
+    if (!sourceSession) {
+      return c.json({ error: 'Session not found' }, 404);
+    }
+
+    let body: DebateExecutionInput & { timeoutMs?: number } = {};
+    try {
+      body = await c.req.json<DebateExecutionInput & { timeoutMs?: number }>();
+    } catch {
+      // Allow empty body.
+    }
+
+    const participants = body.participants ?? hydrateParticipantsForResume(sourceSession.metadata);
+    const result = await runDebateFromInput({
+      question: body.question,
+      rounds: body.rounds ?? sourceSession.metadata.rounds,
+      judge: body.judge ?? (parseJudge(sourceSession.metadata.judge) ?? 'claude'),
+      mode: body.mode ?? sourceSession.metadata.mode,
+      participants,
+      noContext: body.noContext ?? sourceSession.metadata.noContext,
+      executionCwd: body.executionCwd ?? sourceSession.metadata.executionCwd,
+      attachments: body.attachments ?? sourceSession.metadata.attachments,
+      snapshotId: body.snapshotId ?? sourceSession.metadata.evidence?.id,
+      workflowKind: body.workflowKind ?? sourceSession.metadata.workflowKind,
+      ollamaModel: body.ollamaModel ?? sourceSession.metadata.ollamaModel,
+      previousSessionId: sessionId,
+    }, body.timeoutMs);
+
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status);
+    }
+
+    return c.json({
+      ok: true,
+      sessionId: result.sessionId,
+      timeoutMs: result.timeoutMs,
+      continuedFromSessionId: result.continuedFromSessionId,
+    });
   });
 
   app.post('/api/sessions/stop', (c: Context) => {
@@ -622,6 +1053,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
         command,
         sessionId: result.sessionId,
         timeoutMs: result.timeoutMs,
+        continuedFromSessionId: result.continuedFromSessionId,
       });
     }
 
@@ -634,7 +1066,11 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     if (!result.ok) {
       return c.json({ error: result.error }, result.status);
     }
-    return c.json({ sessionId: result.sessionId, timeoutMs: result.timeoutMs });
+    return c.json({
+      sessionId: result.sessionId,
+      timeoutMs: result.timeoutMs,
+      continuedFromSessionId: result.continuedFromSessionId,
+    });
   });
 
   app.get('/api/config/state', (c: Context) => c.json(getConfigState()));
@@ -685,6 +1121,12 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
   const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host });
   serverInstance = server;
+  logDashboard('INFO', 'dashboard_server_started', {
+    url: getBaseUrl(config.port),
+    host: config.host,
+    port: config.port,
+    logFile: getDashboardLogPath(),
+  });
 
   return {
     url: getBaseUrl(config.port),
@@ -695,23 +1137,111 @@ export function startDashboardServer(): { url: string; port: number; close: () =
   };
 }
 
-function createNewsConfig(sources?: string[]): NewsConfig {
+function createNewsConfig(sources?: string[], kind: EvidenceKind = 'news'): NewsConfig {
   const selected = new Set((sources ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean));
   if (selected.size === 0) {
     return DEFAULT_NEWS_CONFIG;
   }
 
+  const braveEnabled = (
+    selected.has('brave')
+    || selected.has('brave-web')
+    || selected.has('braveweb')
+  );
+
   return {
     ...DEFAULT_NEWS_CONFIG,
     providers: {
-      brave: { enabled: selected.has('brave') && DEFAULT_NEWS_CONFIG.providers.brave.enabled },
+      brave: { enabled: braveEnabled && DEFAULT_NEWS_CONFIG.providers.brave.enabled },
+      braveWeb: {
+        enabled: braveEnabled && (
+          DEFAULT_NEWS_CONFIG.providers.braveWeb?.enabled
+          ?? DEFAULT_NEWS_CONFIG.providers.brave.enabled
+        ),
+      },
       newsapi: { enabled: selected.has('newsapi') && DEFAULT_NEWS_CONFIG.providers.newsapi.enabled },
       rss: {
         ...DEFAULT_NEWS_CONFIG.providers.rss,
-        enabled: selected.has('rss') && DEFAULT_NEWS_CONFIG.providers.rss.enabled,
+        enabled: kind === 'news' && selected.has('rss') && DEFAULT_NEWS_CONFIG.providers.rss.enabled,
       },
     },
   };
+}
+
+function parseEvidenceKind(value: unknown): EvidenceKind {
+  return value === 'web' ? 'web' : 'news';
+}
+
+function parseQueryTransformMode(value: unknown): QueryTransformMode {
+  return value === 'expand' ? 'expand' : 'off';
+}
+
+function parseSearchLanguageScope(value: unknown): SearchLanguageScope {
+  return value === 'ko' || value === 'en' || value === 'both' ? value : 'input';
+}
+
+function summarizeEventForLog(event: DebateEvent): Record<string, unknown> {
+  switch (event.type) {
+    case 'round_started':
+      return {
+        type: event.type,
+        round: event.payload.round,
+        totalRounds: event.payload.totalRounds,
+        participants: event.payload.participants.map((participant) => ({
+          id: participant.id,
+          provider: participant.provider,
+        })),
+      };
+    case 'agent_chunk':
+      return {
+        type: event.type,
+        round: event.payload.round,
+        phase: event.payload.phase,
+        provider: event.payload.provider,
+        participantId: event.payload.participantId,
+        chunkChars: event.payload.token.length,
+      };
+    case 'round_finished':
+      return {
+        type: event.type,
+        round: event.payload.round,
+        messageCount: event.payload.messages.length,
+        providers: event.payload.messages.map((message) => message.provider),
+      };
+    case 'round_state_ready':
+      return {
+        type: event.type,
+        round: event.payload.round,
+        shouldSuggestStop: event.payload.shouldSuggestStop,
+        source: event.payload.source,
+        warning: event.payload.warning,
+      };
+    case 'synthesis_ready':
+      return {
+        type: event.type,
+        status: event.payload.status,
+        judge: event.payload.judge,
+        contentChars: event.payload.content?.length ?? 0,
+      };
+    case 'cancelled':
+      return {
+        type: event.type,
+        reason: event.payload.reason,
+        lastRound: event.payload.lastRound,
+        lastProvider: event.payload.lastProvider,
+      };
+    case 'error':
+      return {
+        type: event.type,
+        code: event.payload.code,
+        message: event.payload.message,
+        provider: event.payload.provider,
+        round: event.payload.round,
+        retryable: event.payload.retryable,
+      };
+    default:
+      return { type: event.type };
+  }
 }
 
 function getBaseUrl(port: number): string {
@@ -812,15 +1342,24 @@ function parseJudge(input: unknown): ProviderName | 'both' | undefined {
   return undefined;
 }
 
+function parseDebateMode(input: unknown): DebateMode | undefined {
+  if (typeof input !== 'string') return undefined;
+  const mode = input.trim().toLowerCase();
+  if (mode === 'debate' || mode === 'discussion' || mode === 'plan') {
+    return mode;
+  }
+  return undefined;
+}
+
 function usesOllama(
   participants?: DebateParticipant[],
   judge?: ProviderName | 'both',
 ): boolean {
-  if (participants?.some((participant) => participant.provider === 'ollama')) {
+  if (participants?.some((participant) => isOllamaProviderId(participant.provider))) {
     return true;
   }
 
-  return judge === 'ollama';
+  return isOllamaProviderId(judge);
 }
 
 function validateWorkflowProviders(
@@ -837,6 +1376,10 @@ function validateWorkflowProviders(
   }
 
   return null;
+}
+
+function isOllamaProviderId(provider: unknown): boolean {
+  return typeof provider === 'string' && provider.trim().toLowerCase().startsWith('ollama');
 }
 
 function normalizeProviderName(input: unknown): string {
@@ -982,9 +1525,4 @@ function resolveDashboardDir(): string {
   throw new Error(
     `Dashboard assets not found. Checked: ${candidates.map((path) => join(path, 'index.html')).join(', ')}`,
   );
-}
-
-if (process.argv[1] === __filename) {
-  const { url } = startDashboardServer();
-  console.log(`Dashboard server running at ${url}`);
 }

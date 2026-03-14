@@ -211,6 +211,58 @@ da "이 모듈 리팩토링" --plan
 da "이 코드를 어떻게 개선할까?" --files src/index.ts src/utils.ts
 ```
 
+### 라이브 웹 검색
+
+DEBATE ARENA의 외부 조사 경로는 두 가지입니다.
+
+- 각 provider가 자기 차례에 직접 수행하는 라이브 검색
+- 토론 전에 공통으로 수집해서 모든 참가자에게 주입하는 evidence snapshot
+
+provider별 동작은 다음과 같습니다.
+
+- **Codex**: `webSearch: true`로 네이티브 라이브 검색 사용
+- **Gemini**: 내장 web search/fetch를 쓰도록 프롬프트가 강화됨
+- **Claude**: `mcpConfigs` + `allowedTools`로 MCP 검색 도구 연결
+- **Ollama**: `ollamaTools.webSearch: true`로 앱 내부 tool calling 웹검색 사용 가능, 또는 `--news` / `--web` snapshot 사용
+
+Codex CLI는 네이티브 라이브 웹 검색을 이미 지원합니다. DEBATE ARENA 밖에서는 이렇게 사용할 수 있습니다.
+
+```bash
+codex --search "EU AI Act 집행 관련 최근 보도를 찾아줘"
+```
+
+DEBATE ARENA 안에서는 provider 설정으로 연결합니다.
+
+```json
+{
+  "providers": {
+    "codex": {
+      "type": "cli",
+      "command": "codex exec --skip-git-repo-check -",
+      "webSearch": true,
+      "model": "default"
+    },
+    "claude": {
+      "type": "cli",
+      "command": "claude -p",
+      "mcpConfigs": ["./.claude/debate-arena.mcp.json"],
+      "strictMcpConfig": true,
+      "allowedTools": ["mcp__brave-search"],
+      "model": "default"
+    }
+  }
+}
+```
+
+레거시 설정도 지원합니다.
+
+```bash
+da
+/config set codexWebSearch true
+```
+
+`webSearch` / `ollamaTools.webSearch`와 `--news` / `--web`는 다릅니다. 라이브 검색은 개별 provider의 자기 차례에만 적용되고, snapshot은 Ollama를 포함한 모든 참가자에게 동일한 근거 팩을 제공합니다.
+
 ---
 
 ### 인터랙티브 REPL
@@ -265,6 +317,9 @@ da > /exit                                  # 종료
 | `--news [query]` | 토론 전 뉴스 증거 수집 | - |
 | `--news-quiet` | 기사 목록 출력 생략 | - |
 | `--news-snapshot <path>` | 기존 스냅샷 파일 재사용 | - |
+| `--web [query]` | 토론 전 일반 웹 근거 수집 | - |
+| `--web-quiet` | 근거 목록 출력 생략 | - |
+| `--web-snapshot <path>` | 기존 웹 스냅샷 파일 재사용 | - |
 
 ## REPL 명령어
 
@@ -281,6 +336,7 @@ da > /exit                                  # 종료
 | `/participants <p1> <p2>` | provider id로 참가자 설정 (예: `ollama-local cloud-gpt`) |
 | `/output <경로>` | 토론 내용을 마크다운 파일로 저장 |
 | `/news <query>` | 뉴스 기사를 토론 증거로 수집 |
+| `/web <query>` | 일반 웹 검색 결과를 토론 근거로 수집 |
 | `/model codex <name>` | Codex 모델 설정 |
 | `/model claude <name>` | Claude 모델 설정 |
 | `/model list` | 현재 설정된 모델 표시 |
@@ -290,45 +346,70 @@ da > /exit                                  # 종료
 | `/help` | 도움말 표시 |
 | `/exit` | REPL 종료. 별칭: `/quit` |
 
-## 뉴스 증거 (News Evidence)
+## Evidence Snapshot
 
-DEBATE ARENA는 실시간 뉴스 기사를 수집해 토론 증거로 주입할 수 있습니다. AI들이 최신 실제 정보를 바탕으로 논쟁하게 됩니다.
+DEBATE ARENA는 토론 전에 공통 근거를 수집해 모든 참가자에게 주입할 수 있습니다. Codex, Gemini, Claude, Ollama가 동일한 조사 결과를 공유하게 됩니다.
 
-### 지원 뉴스 provider
+다음 경우에 snapshot 경로가 적합합니다.
+
+- 모든 모델이 같은 외부 자료를 봐야 할 때
+- Ollama까지 최신 웹 근거를 받아야 할 때
+- 재현 가능한 토론 입력이 필요할 때
+
+### 지원 snapshot provider
 
 | Provider | 환경변수 | 비고 |
 |----------|---------|------|
-| **Brave Search** (기본) | `BRAVE_API_KEY` | brave.com/search/api 무료 티어 |
+| **Brave News Search** | `BRAVE_API_KEY` | `--news` 기본 provider |
+| **Brave Web Search** | `BRAVE_API_KEY` | `--web` 기본 provider |
 | **NewsAPI** | `NEWS_API_KEY` | newsapi.org |
 | **RSS 피드** | — | 공개 RSS/Atom URL 지원 |
 
-### 토론 전 뉴스 수집 (CLI)
+### 토론 전 근거 수집 (CLI)
 
 ```bash
 # 뉴스 수집 후 토론
 da "올해 Fed가 금리를 내릴까?" --news
 
-# 기사 목록 출력 생략
+# 일반 웹 근거 수집 후 토론
+da "EU AI Act가 모델 배포에 어떤 영향을 주는가?" --web
+
+# 근거 목록 출력 생략
 da "AI가 일자리에 미치는 영향" --news --news-quiet
+da "Bun 최신 변경 사항" --web --web-quiet
 
 # 이전에 저장한 스냅샷 재사용
 da "후속 질문" --news-snapshot ./ffm-snapshots/snap-abc123.json
+da "후속 질문" --web-snapshot ./ffm-snapshots/snap-def456.json
 ```
 
-### REPL에서 뉴스 수집
+### REPL에서 근거 수집
 
 ```bash
 da > /news 연준 금리 인하 2026
 # → 기사 수집 → 스냅샷 저장 → 다음 토론에 주입
 
+da > /web bun package manager roadmap 2026
+# → 웹 검색 결과 수집 → 스냅샷 저장 → 다음 토론에 주입
+
 da > 연준이 금리를 내릴까?
-# → 수집된 기사를 증거로 AI들이 토론
+# → 수집된 근거 팩을 바탕으로 AI들이 토론
 ```
 
-### 뉴스 토론 모드
+### 근거 주입 모드
 
 - **unified** — 모든 증거를 양측 참가자에게 동시 제공
 - **split** — 각 참가자의 입장에 맞는 증거만 제공
+
+### Claude MCP 설정
+
+이 프로젝트는 Brave Search용 MCP 파일 `./.claude/debate-arena.mcp.json`을 사용하도록 설정할 수 있습니다. Claude provider에 다음 필드를 넣으면 검색 가능한 참가자로 바로 연결됩니다.
+
+- `mcpConfigs`
+- `strictMcpConfig`
+- `allowedTools`
+
+머신 전체에서 Claude가 Brave Search를 보게 하려면 `~/.mcp.json`에도 같은 서버를 추가하면 됩니다.
 
 ### 대시보드 워크벤치
 
@@ -336,13 +417,13 @@ da > 연준이 금리를 내릴까?
 
 - `/` : 허브 페이지
 - `/project.html` : 로컬 프로젝트 개선 토론 전용
-- `/news.html` : 뉴스 근거 수집 + 뉴스 토론 전용
+- `/news.html` : 뉴스/웹 근거 수집 + 근거 기반 토론 워크벤치
 - `/settings.html` : 역할 템플릿 YAML 편집
 
 핵심 흐름:
 
 - 프로젝트 개선 페이지는 로컬 작업 디렉터리와 첨부 파일을 기준으로 토론을 실행합니다.
-- 뉴스 페이지는 근거 팩 수집, 스냅샷 선택, 라운드 보드, synthesis를 한 흐름으로 묶습니다.
+- 근거 페이지는 뉴스/웹 스냅샷 수집, 스냅샷 선택, 라운드 보드, synthesis를 한 흐름으로 묶습니다.
 - 두 페이지 모두 라운드별 요약 보드를 누적해서 보여주며, 이전 라운드도 다시 열람할 수 있습니다.
 
 ### 역할 템플릿과 YAML 설정
@@ -373,13 +454,24 @@ da > 연준이 금리를 내릴까?
 - `participants[]`
 - 각 participant의 `roleId`, `label`, `focus`, `defaultProvider`, `instructions`, `requiredQuestions`
 
-### config.v2.json 뉴스 설정
+### config.v2.json snapshot 설정
 
 ```json
 {
+  "providers": {
+    "claude": {
+      "type": "cli",
+      "command": "claude -p",
+      "mcpConfigs": ["./.claude/debate-arena.mcp.json"],
+      "strictMcpConfig": true,
+      "allowedTools": ["mcp__brave-search"],
+      "model": "default"
+    }
+  },
   "news": {
     "providers": {
       "brave":   { "enabled": true },
+      "braveWeb": { "enabled": true },
       "newsapi": { "enabled": false },
       "rss":     { "enabled": true, "feeds": ["https://feeds.bbci.co.uk/news/rss.xml"] }
     },
@@ -404,7 +496,7 @@ export NEWS_API_KEY="..."    # newsapi 활성화 시에만 필요
 |------|------|--------|
 | `codexCommand` | Codex CLI 명령어 | `codex exec --skip-git-repo-check -` |
 | `claudeCommand` | Claude CLI 명령어 | `claude -p` |
-| `commandTimeoutMs` | 에이전트 명령어 타임아웃 (ms) | `180000` |
+| `commandTimeoutMs` | 에이전트 명령어 타임아웃 (ms) | `600000` |
 | `defaultRounds` | 기본 토론 라운드 수 | `3` |
 | `defaultJudge` | 기본 심판 | `claude` |
 | `defaultFormat` | 기본 출력 형식 | `pretty` |
@@ -459,6 +551,7 @@ da config set defaultJudge both
       "type": "ollama-compat",
       "baseUrl": "http://127.0.0.1:11434",
       "model": "llama3.2",
+      "ollamaTools": { "webSearch": true },
       "capabilities": { "supportsStreaming": true, "maxContextTokens": 131072 }
     },
     "ollama-vision": {
@@ -494,7 +587,7 @@ da config set defaultJudge both
     "defaultJudge": "ollama-cloud-qwen3-coder-next",
     "defaultFormat": "pretty",
     "stream": true,
-    "commandTimeoutMs": 180000,
+    "commandTimeoutMs": 600000,
     "applyTimeoutMs": 300000
   }
 }
@@ -508,10 +601,12 @@ da config set defaultJudge both
   - `model`: 선택. 비우거나 `default`면 CLI 기본 모델 사용
   - `model`을 지정했고 `command`에 `--model`이 없으면 da가 `--model <값>`을 자동 추가
 - `ollama-compat` 타입은 로컬 Ollama와 OpenAI 호환 클라우드 엔드포인트 둘 다 사용 가능합니다.
+- `ollamaTools.webSearch: true`를 주면 Ollama에 앱이 제공하는 `web_search` / `web_fetch` tool calling을 붙일 수 있습니다.
 - API 키 지정 방법:
   - Ollama Cloud용 `ollama_api_key` (또는 `ollamaApiKey`)
   - config에 `openai_api_key` (또는 `openaiApiKey`, `apiKey`) 직접 입력
   - `apiKeyEnvVar` + 환경변수 사용
+- provider 자체 API 키가 없을 때 Ollama 웹 도구는 기본적으로 `OLLAMA_API_KEY`를 사용합니다.
 - 이 프로젝트 기준 `baseUrl`은 `https://ollama.com`으로 설정하세요 (런타임이 `/v1/...`를 자동으로 붙임).
 - Ollama Cloud는 일반적으로 `apiKeyEnvVar: "OLLAMA_API_KEY"` 사용을 권장합니다.
 - 최신 클라우드 모델 목록: `https://ollama.com/search?c=cloud&o=newest`

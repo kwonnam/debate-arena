@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AIProvider } from '../providers/types.js';
+import type { AIProvider, Message } from '../providers/types.js';
 import type {
   DebateCallbacks,
   DebateMessage,
@@ -20,16 +20,19 @@ import { isProviderTimeoutError } from '../providers/errors.js';
 import { summarizeSnapshot } from '../news/snapshot.js';
 
 type CancellationReason = 'user_cancelled' | 'timeout' | 'server_shutdown';
+type DiagnosticLogger = (message: string, meta?: Record<string, unknown>) => void;
 
 export class DebateOrchestrator {
   private providers: Map<ProviderName, AIProvider>;
   private sessionStore?: SessionStore;
   private eventEmitter?: (event: DebateEvent) => void;
+  private diagnosticLogger?: DiagnosticLogger;
 
   constructor(
     providers: Map<ProviderName, AIProvider> | { codex: AIProvider; claude: AIProvider; gemini?: AIProvider },
     sessionStore?: SessionStore,
     eventEmitter?: (event: DebateEvent) => void,
+    diagnosticLogger?: DiagnosticLogger,
   ) {
     if (providers instanceof Map) {
       this.providers = providers;
@@ -38,6 +41,7 @@ export class DebateOrchestrator {
     }
     this.sessionStore = sessionStore;
     this.eventEmitter = eventEmitter;
+    this.diagnosticLogger = diagnosticLogger;
   }
 
   private emitEvent(event: DebateEvent): void {
@@ -49,6 +53,10 @@ export class DebateOrchestrator {
       }
     }
     this.eventEmitter?.(event);
+  }
+
+  private logDiagnostic(message: string, meta?: Record<string, unknown>): void {
+    this.diagnosticLogger?.(message, meta);
   }
 
   private getProvider(name: ProviderName): AIProvider {
@@ -64,6 +72,7 @@ export class DebateOrchestrator {
     const synthBuilder = getSynthesisPromptBuilder(mode);
 
     const { rounds, stream } = options;
+    const resumeFromRound = normalizeResumeFromRound(options.resumeFromRound, rounds);
     const participants = normalizeDebateParticipants(options.participants);
     const context = new DebateContext(
       options.question,
@@ -73,27 +82,56 @@ export class DebateOrchestrator {
       participants,
       options.snapshot,
       options.newsMode,
+      options.previousDebate,
     );
+
+    for (const message of options.initialMessages ?? []) {
+      context.addMessage(message);
+    }
+
+    for (const roundState of options.initialRoundStates ?? []) {
+      context.addRoundState(roundState);
+    }
 
     if (this.sessionStore) {
       this.sessionStore.create(sessionId, {
         sessionId,
         question: options.question,
         participants: toEventParticipants(participants),
+        participantDetails: participants,
         rounds: options.rounds,
         createdAt: Date.now(),
         judge: options.judge,
         mode: mode,
         workflowKind: options.workflowKind ?? 'general',
         executionCwd: options.executionCwd,
+        noContext: options.noContext,
+        attachments: options.attachments ?? [],
         evidence: toSessionEvidenceSummary(options.snapshot),
         ollamaModel: options.ollamaModel,
+        resumedFromSessionId: options.resumeFromSessionId,
+        resumeStage: options.resumeStage,
+        continuedFromSessionId: options.continuedFromSessionId,
       });
       this.sessionStore.updateStatus(sessionId, 'RUNNING');
     }
+    this.emitSeededHistory(sessionId, participants, rounds, context, resumeFromRound);
+    this.logDiagnostic('debate_run_started', {
+      sessionId,
+      rounds,
+      stream,
+      judge: options.judge,
+      workflowKind: options.workflowKind ?? 'general',
+      participantProviders: participants.map((participant) => participant.provider),
+      executionCwd: options.executionCwd,
+      hasSnapshot: Boolean(options.snapshot),
+      resumedFromSessionId: options.resumeFromSessionId,
+      resumeStage: options.resumeStage,
+      resumeFromRound,
+    });
 
     try {
-      for (let round = 1; round <= rounds; round++) {
+      for (let round = resumeFromRound; round <= rounds; round++) {
         this.ensureNotAborted(sessionId, options.signal, round);
         this.sessionStore?.updateStatus(sessionId, 'RUNNING');
         callbacks.onRoundStart(round, rounds);
@@ -258,6 +296,12 @@ export class DebateOrchestrator {
       if (this.sessionStore) {
         this.sessionStore.updateStatus(sessionId, 'COMPLETED');
       }
+      this.logDiagnostic('debate_run_completed', {
+        sessionId,
+        rounds,
+        synthesized: Boolean(synthesis),
+        messageCount: context.getMessages().length,
+      });
 
       return {
         question: options.question,
@@ -265,8 +309,13 @@ export class DebateOrchestrator {
         roundStates: context.getRoundStates(),
         synthesis,
         rounds,
+        mode,
       };
     } catch (error) {
+      this.logDiagnostic('debate_run_failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (error instanceof DOMException && error.name === 'AbortError') {
         this.emitCancellation(sessionId, this.getCancellationReason(options.signal));
       } else if (isProviderTimeoutError(error)) {
@@ -408,6 +457,17 @@ export class DebateOrchestrator {
 
     const messages = context.buildMessagesFor(participant, round, phase);
     const aiProvider = this.getProvider(participant.provider);
+    const startedAt = Date.now();
+    this.logDiagnostic('turn_started', {
+      sessionId,
+      round,
+      phase,
+      participantId: participant.id,
+      participantLabel: participant.label,
+      provider: participant.provider,
+      promptMessageCount: messages.length,
+      promptChars: estimateMessageChars(messages),
+    });
 
     try {
       const content = await this.callWithRetry(
@@ -445,6 +505,16 @@ export class DebateOrchestrator {
         3,
         sessionId
       );
+      this.logDiagnostic('turn_completed', {
+        sessionId,
+        round,
+        phase,
+        participantId: participant.id,
+        participantLabel: participant.label,
+        provider: participant.provider,
+        durationMs: Date.now() - startedAt,
+        contentChars: content.length,
+      });
 
       return {
         participantId: participant.id,
@@ -455,6 +525,23 @@ export class DebateOrchestrator {
         content,
       };
     } catch (error) {
+      this.logDiagnostic(
+        isProviderTimeoutError(error)
+          ? 'turn_timeout'
+          : error instanceof DOMException && error.name === 'AbortError'
+            ? 'turn_aborted'
+            : 'turn_failed',
+        {
+          sessionId,
+          round,
+          phase,
+          participantId: participant.id,
+          participantLabel: participant.label,
+          provider: participant.provider,
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
       if (error instanceof DOMException && error.name === 'AbortError') {
         this.emitCancellation(sessionId, this.getCancellationReason(signal), round, participant.provider);
       } else if (isProviderTimeoutError(error)) {
@@ -480,6 +567,65 @@ export class DebateOrchestrator {
         phase: message.phase,
       },
     });
+  }
+
+  private emitSeededHistory(
+    sessionId: string,
+    participants: DebateParticipant[],
+    totalRounds: number,
+    context: DebateContext,
+    resumeFromRound: number,
+  ): void {
+    if (resumeFromRound <= 1) {
+      return;
+    }
+
+    for (let round = 1; round < resumeFromRound; round++) {
+      const roundMessages = context.getMessagesForRound(round);
+      if (roundMessages.length === 0) {
+        continue;
+      }
+
+      this.emitEvent({
+        type: 'round_started',
+        sessionId,
+        timestamp: Date.now(),
+        payload: {
+          round,
+          total: totalRounds,
+          totalRounds,
+          participants: toEventParticipants(participants),
+        },
+      });
+
+      this.emitEvent({
+        type: 'round_finished',
+        sessionId,
+        timestamp: Date.now(),
+        payload: {
+          round,
+          messages: roundMessages.map((message) => ({
+            provider: message.provider,
+            participantId: message.participantId,
+            label: message.label,
+            phase: message.phase,
+            content: message.content,
+          })),
+        },
+      });
+
+      const roundState = context.getRoundStates().find((entry) => entry.round === round);
+      if (!roundState) {
+        continue;
+      }
+
+      this.emitEvent({
+        type: 'round_state_ready',
+        sessionId,
+        timestamp: Date.now(),
+        payload: roundState,
+      });
+    }
   }
 
   private async buildRoundState(
@@ -509,7 +655,16 @@ export class DebateOrchestrator {
   ): Promise<string> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await fn();
+        const content = await fn();
+        this.logDiagnostic('turn_attempt_completed', {
+          sessionId,
+          participantId: participant.id,
+          participantLabel: participant.label,
+          provider: participant.provider,
+          attempt,
+          contentChars: content.length,
+        });
+        return content;
       } catch (error) {
         // Re-throw AbortError immediately without emitting error event
         if (error instanceof DOMException && error.name === 'AbortError') {
@@ -536,6 +691,15 @@ export class DebateOrchestrator {
           throw error;
         }
         callbacks.onRetry(participant, attempt, maxAttempts, error as Error);
+        this.logDiagnostic('turn_retry_scheduled', {
+          sessionId,
+          participantId: participant.id,
+          participantLabel: participant.label,
+          provider: participant.provider,
+          attempt,
+          maxAttempts,
+          error: error instanceof Error ? error.message : String(error),
+        });
         await delay(attempt * 5000);
       }
     }
@@ -586,6 +750,15 @@ export class DebateOrchestrator {
   }
 }
 
+function estimateMessageChars(messages: Message[]): number {
+  return messages.reduce((total, message) => {
+    const attachmentChars = (message.attachments ?? []).reduce((sum, attachment) => {
+      return sum + (attachment.content?.length ?? 0);
+    }, 0);
+    return total + message.content.length + attachmentChars;
+  }, 0);
+}
+
 function toSessionEvidenceSummary(snapshot?: DebateOptions['snapshot']): SessionEvidenceSummary | undefined {
   if (!snapshot) {
     return undefined;
@@ -594,6 +767,7 @@ function toSessionEvidenceSummary(snapshot?: DebateOptions['snapshot']): Session
   const summary = summarizeSnapshot(snapshot);
   return {
     id: summary.id,
+    kind: summary.kind,
     query: summary.query,
     collectedAt: summary.collectedAt,
     articleCount: summary.articleCount,
@@ -618,6 +792,14 @@ function isRateLimitError(error: unknown): boolean {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeResumeFromRound(resumeFromRound: number | undefined, rounds: number): number {
+  if (!Number.isFinite(resumeFromRound)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.min(rounds + 1, Math.trunc(resumeFromRound as number)));
 }
 
 function parseCancellationReason(reason: unknown): CancellationReason | null {

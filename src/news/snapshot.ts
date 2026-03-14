@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import type { SearchPlan } from './search-plan.js';
+
+export type EvidenceKind = 'news' | 'web';
 
 export interface NewsArticle {
   title: string;
@@ -11,25 +14,29 @@ export interface NewsArticle {
 
 export interface EvidenceSnapshot {
   id: string;           // SHA-256 해시 (재현성 보장)
+  kind?: EvidenceKind;
   query: string;
   collectedAt: string;  // ISO 8601
   sources: string[];    // 사용된 provider 이름 목록
   articles: NewsArticle[];
   excludedCount: number;
+  searchPlan?: SearchPlan;
 }
 
 export interface EvidenceSnapshotSummary {
   id: string;
+  kind: EvidenceKind;
   query: string;
   collectedAt: string;
   articleCount: number;
   sources: string[];
   topDomains: string[];
   excludedCount: number;
+  searchPlan?: SearchPlan;
 }
 
-export function createSnapshotId(query: string, urls: string[]): string {
-  const input = [query, ...urls.sort()].join('|');
+export function createSnapshotId(query: string, urls: string[], kind: EvidenceKind = 'news'): string {
+  const input = [kind, query, ...urls.sort()].join('|');
   return createHash('sha256').update(input).digest('hex').slice(0, 12);
 }
 
@@ -63,11 +70,37 @@ export function summarizeSnapshot(snapshot: EvidenceSnapshot): EvidenceSnapshotS
 
   return {
     id: snapshot.id,
+    kind: normalizeEvidenceKind(snapshot.kind),
     query: snapshot.query,
     collectedAt: snapshot.collectedAt,
     articleCount: articles.length,
     sources: Array.isArray(snapshot.sources) ? snapshot.sources.map((source) => String(source)).filter(Boolean) : [],
     topDomains,
     excludedCount: Number.isFinite(snapshot.excludedCount) ? snapshot.excludedCount : 0,
+    searchPlan: normalizeSearchPlan(snapshot.searchPlan),
+  };
+}
+
+export function normalizeEvidenceKind(kind?: string): EvidenceKind {
+  return kind === 'web' ? 'web' : 'news';
+}
+
+function normalizeSearchPlan(searchPlan?: SearchPlan): SearchPlan | undefined {
+  if (!searchPlan || !Array.isArray(searchPlan.queries)) {
+    return undefined;
+  }
+
+  return {
+    detectedLanguage: searchPlan.detectedLanguage === 'ko' || searchPlan.detectedLanguage === 'en'
+      ? searchPlan.detectedLanguage
+      : 'other',
+    llmApplied: Boolean(searchPlan.llmApplied),
+    queries: searchPlan.queries
+      .map((query) => ({
+        query: String(query?.query ?? '').trim(),
+        language: query?.language === 'ko' || query?.language === 'en' ? query.language : undefined,
+        source: query?.source === 'translated' || query?.source === 'expanded' ? query.source : 'original',
+      }))
+      .filter((query) => Boolean(query.query)),
   };
 }

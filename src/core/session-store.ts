@@ -1,3 +1,4 @@
+import type { DebateAttachment, DebateMode } from '../types/debate.js';
 import type { DebateEvent, DebateEventEnvelope } from '../types/debate-events.js';
 import type { DebateParticipant } from '../types/roles.js';
 
@@ -12,18 +13,25 @@ export interface SessionMetadata {
   sessionId: string;
   question: string;
   participants: SessionParticipantSummary[];
+  participantDetails?: DebateParticipant[];
   rounds: number;
   createdAt: number; // Unix ms
   judge?: string;
-  mode?: 'debate' | 'plan';
+  mode?: DebateMode;
   workflowKind?: 'news' | 'project' | 'general';
   executionCwd?: string;
+  noContext?: boolean;
+  attachments?: DebateAttachment[];
   evidence?: SessionEvidenceSummary;
   ollamaModel?: string;
+  resumedFromSessionId?: string;
+  resumeStage?: string;
+  continuedFromSessionId?: string;
 }
 
 export interface SessionEvidenceSummary {
   id: string;
+  kind: 'news' | 'web';
   query: string;
   collectedAt: string;
   articleCount: number;
@@ -62,11 +70,14 @@ export interface SessionSummary {
   eventCount: number;
   participants: SessionParticipantSummary[];
   judge?: string;
-  mode?: 'debate' | 'plan';
+  mode?: DebateMode;
   workflowKind?: 'news' | 'project' | 'general';
   executionCwd?: string;
   evidence?: SessionEvidenceSummary;
   ollamaModel?: string;
+  resumedFromSessionId?: string;
+  resumeStage?: string;
+  continuedFromSessionId?: string;
 }
 
 // SessionStore 인터페이스
@@ -139,6 +150,9 @@ export class InMemorySessionStore implements SessionStore {
         executionCwd: session.metadata.executionCwd,
         evidence: session.metadata.evidence,
         ollamaModel: session.metadata.ollamaModel,
+        resumedFromSessionId: session.metadata.resumedFromSessionId,
+        resumeStage: session.metadata.resumeStage,
+        continuedFromSessionId: session.metadata.continuedFromSessionId,
       }))
       .sort((a, b) => b.createdAt - a.createdAt);
   }

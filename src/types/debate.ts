@@ -11,7 +11,7 @@ export type OutputFormat = 'pretty' | 'json' | 'markdown';
 
 export type JudgeOption = ProviderName | 'both';
 
-export type DebateMode = 'debate' | 'plan';
+export type DebateMode = 'debate' | 'discussion' | 'plan';
 
 export type NewsMode = 'unified' | 'split';
 
@@ -24,6 +24,20 @@ export interface DebateAttachment {
   kind: 'text' | 'image';
   mimeType: string;
   content: string;
+}
+
+export interface PreviousDebateParticipant {
+  label: string;
+  provider: ProviderName;
+}
+
+export interface PreviousDebateContext {
+  sourceSessionId: string;
+  question: string;
+  judge?: string;
+  participants: PreviousDebateParticipant[];
+  synthesis?: string;
+  latestRoundState?: DebateRoundState;
 }
 
 export interface DebateRoundState {
@@ -53,11 +67,19 @@ export interface DebateOptions {
   participants?: Array<ProviderName | DebateParticipant>;
   signal?: AbortSignal;
   executionCwd?: string;
+  noContext?: boolean;
   attachments?: DebateAttachment[];
   snapshot?: EvidenceSnapshot;
   newsMode?: NewsMode;
   workflowKind?: WorkflowKind;
   ollamaModel?: string;
+  previousDebate?: PreviousDebateContext;
+  initialMessages?: DebateMessage[];
+  initialRoundStates?: DebateRoundState[];
+  resumeFromRound?: number;
+  resumeFromSessionId?: string;
+  resumeStage?: string;
+  continuedFromSessionId?: string;
 }
 
 export interface DebateMessage {
@@ -75,6 +97,7 @@ export interface DebateResult {
   roundStates: DebateRoundState[];
   synthesis: string | null;
   rounds: number;
+  mode: DebateMode;
 }
 
 export interface DebateCallbacks {

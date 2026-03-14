@@ -211,6 +211,59 @@ da "Refactor this module" --plan
 da "How to improve this code?" --files src/index.ts src/utils.ts
 ```
 
+### Live Web Search
+
+DEBATE ARENA now supports two separate research paths:
+
+- provider-native live search during a participant's own turn
+- shared evidence snapshots injected into every participant before the debate
+
+Provider behavior:
+
+- **Codex**: native live search via `webSearch: true`
+- **Gemini**: built-in web search/fetch; the debate prompts now explicitly tell Gemini to verify time-sensitive claims with web tools
+- **Claude**: attach MCP search tools with `mcpConfigs` + `allowedTools`
+- **Ollama**: app-provided internal tool calling via `ollamaTools.webSearch: true`, or shared evidence snapshots (`--news` or `--web`)
+- **Web UI bridge**: connect DEBATE ARENA to a browser tab through a local WebSocket bridge such as `web-ai-cli-bridge`
+
+Outside DEBATE ARENA:
+
+```bash
+codex --search "Find recent coverage of EU AI Act enforcement"
+```
+
+Inside DEBATE ARENA:
+
+```json
+{
+  "providers": {
+    "codex": {
+      "type": "cli",
+      "command": "codex exec --skip-git-repo-check -",
+      "webSearch": true,
+      "model": "default"
+    },
+    "claude": {
+      "type": "cli",
+      "command": "claude -p",
+      "mcpConfigs": ["./.claude/debate-arena.mcp.json"],
+      "strictMcpConfig": true,
+      "allowedTools": ["mcp__brave-search"],
+      "model": "default"
+    }
+  }
+}
+```
+
+Legacy Codex config also works:
+
+```bash
+da
+/config set codexWebSearch true
+```
+
+`webSearch` / `ollamaTools.webSearch` are different from `--news` / `--web`: live search affects one provider during its turn, while evidence snapshots create a shared research pack for every participant, including Ollama.
+
 ---
 
 ### Interactive REPL
@@ -253,7 +306,7 @@ da > /exit                            # Quit
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-r, --rounds <n>` | Number of debate rounds | `3` |
-| `-j, --judge <provider>` | Judge for synthesis: `codex`, `claude`, `both` | `claude` |
+| `-j, --judge <provider>` | Judge for synthesis: `<provider-id>` or `both` | `claude` |
 | `-f, --format <format>` | Output format: `pretty`, `json`, `markdown` | `pretty` |
 | `--plan` | Enable plan mode (debate → apply code) | `false` |
 | `-i, --interactive` | Join as a third participant | `false` |
@@ -264,6 +317,9 @@ da > /exit                            # Quit
 | `--news [query]` | Collect news evidence before debate | - |
 | `--news-quiet` | Suppress article listing | - |
 | `--news-snapshot <path>` | Reuse a saved snapshot file | - |
+| `--web [query]` | Collect general web evidence before debate | - |
+| `--web-quiet` | Suppress evidence listing | - |
+| `--web-snapshot <path>` | Reuse a saved web snapshot file | - |
 
 ## REPL Commands
 
@@ -280,6 +336,7 @@ da > /exit                            # Quit
 | `/participants <p1> <p2>` | Set debate participants by provider id (e.g., `ollama-local cloud-gpt`) |
 | `/output <path>` | Save debate to a markdown file |
 | `/news <query>` | Collect news articles as debate evidence |
+| `/web <query>` | Collect general web search results as debate evidence |
 | `/model codex <name>` | Set Codex model |
 | `/model claude <name>` | Set Claude model |
 | `/model list` | Show configured models |
@@ -339,60 +396,89 @@ export OLLAMA_MODEL="llava"
 - **`/stop team`** (REPL): stops all local dashboard sessions and the local dashboard server in current process
 - **`/stop`** (REPL): performs team stop first, then stops other running debate-arena processes (legacy process scan behavior)
 
-## News Evidence
+## Evidence Snapshots
 
-DEBATE ARENA can collect real-time news articles and inject them as evidence into the debate, so the AIs argue based on actual recent information.
+DEBATE ARENA can collect shared evidence before a debate and inject it into every participant, so all models argue from the same research pack.
 
-### Supported news providers
+Use this path when:
+
+- you want Codex, Gemini, Claude, and Ollama to see the same external material
+- you need reproducible debate inputs
+- you want Ollama to participate in current-events or web-research debates
+
+### Supported snapshot providers
 
 | Provider | Env var | Notes |
 |----------|---------|-------|
-| **Brave Search** (default) | `BRAVE_API_KEY` | Free tier available at brave.com/search/api |
+| **Brave News Search** | `BRAVE_API_KEY` | Default for `--news` |
+| **Brave Web Search** | `BRAVE_API_KEY` | Default for `--web` |
 | **NewsAPI** | `NEWS_API_KEY` | newsapi.org |
 | **RSS feeds** | — | Any public RSS/Atom URL |
 
-### Collect news before a debate
+### Collect shared evidence before a debate
 
 ```bash
 # One-shot: collect news then debate
 da "Will the Fed cut rates this year?" --news
 
-# Suppress article listing (quiet mode)
+# One-shot: collect general web evidence then debate
+da "How is the EU AI Act affecting model deployment?" --web
+
+# Suppress evidence listing (quiet mode)
 da "Impact of AI on jobs" --news --news-quiet
+da "Latest Bun package manager changes" --web --web-quiet
 
 # Reuse a previously saved snapshot
 da "Follow-up question" --news-snapshot ./ffm-snapshots/snap-abc123.json
+da "Follow-up question" --web-snapshot ./ffm-snapshots/snap-def456.json
 ```
 
-### Collect news inside REPL
+### Collect evidence inside REPL
 
 ```bash
 da > /news federal reserve rate cut 2026
 # → fetches articles, saves snapshot, injects into next debate
 
+da > /web bun package manager roadmap 2026
+# → fetches web results, saves snapshot, injects into next debate
+
 da > Federal Reserve가 금리를 내릴까?
-# → AIs debate using the collected articles as evidence
+# → AIs debate using the collected evidence pack
 ```
 
-### News debate modes
+### Evidence debate modes
 
 - **unified** — all evidence is shared with both participants at once
 - **split** — each participant sees evidence relevant to their side
 
-### News tab in Dashboard
+### Claude MCP setup
 
-Open the dashboard (`/dashboard`) and click the **News** tab to:
-- Browse the saved snapshot library
-- Inspect individual articles per snapshot
-- Launch a debate directly from a snapshot
+This project is configured to use a Brave Search MCP file at `./.claude/debate-arena.mcp.json`. The Claude provider example above wires it in with:
 
-### Configure news providers (`config.v2.json`)
+- `mcpConfigs`
+- `strictMcpConfig`
+- `allowedTools`
+
+For machine-wide Claude usage, add the same Brave MCP server to `~/.mcp.json`.
+
+### Configure snapshot providers (`config.v2.json`)
 
 ```json
 {
+  "providers": {
+    "claude": {
+      "type": "cli",
+      "command": "claude -p",
+      "mcpConfigs": ["./.claude/debate-arena.mcp.json"],
+      "strictMcpConfig": true,
+      "allowedTools": ["mcp__brave-search"],
+      "model": "default"
+    }
+  },
   "news": {
     "providers": {
       "brave":   { "enabled": true },
+      "braveWeb": { "enabled": true },
       "newsapi": { "enabled": false },
       "rss":     { "enabled": true, "feeds": ["https://feeds.bbci.co.uk/news/rss.xml"] }
     },
@@ -417,7 +503,7 @@ Default settings can be changed via `da config` or by editing `~/.debate-arena/c
 |---------|-------------|---------|
 | `codexCommand` | Codex CLI command | `codex exec --skip-git-repo-check -` |
 | `claudeCommand` | Claude CLI command | `claude -p` |
-| `commandTimeoutMs` | Agent command timeout (ms) | `180000` |
+| `commandTimeoutMs` | Agent command timeout (ms) | `600000` |
 | `defaultRounds` | Default debate rounds | `3` |
 | `defaultJudge` | Default judge | `claude` |
 | `defaultFormat` | Default output format | `pretty` |
@@ -468,10 +554,23 @@ For local testing, this is also supported in the **current working directory**:
       "model": "default",
       "capabilities": { "supportsStreaming": true, "maxContextTokens": 1000000 }
     },
+    "grok-web-a": {
+      "type": "web-ai-bridge",
+      "bridgeUrl": "ws://127.0.0.1:17373",
+      "model": "grok.com",
+      "capabilities": { "supportsStreaming": true, "maxContextTokens": 128000 }
+    },
+    "grok-web-b": {
+      "type": "web-ai-bridge",
+      "bridgeUrl": "ws://127.0.0.1:17473",
+      "model": "grok.com",
+      "capabilities": { "supportsStreaming": true, "maxContextTokens": 128000 }
+    },
     "ollama-local": {
       "type": "ollama-compat",
       "baseUrl": "http://127.0.0.1:11434",
       "model": "llama3.2",
+      "ollamaTools": { "webSearch": true },
       "capabilities": { "supportsStreaming": true, "maxContextTokens": 131072 }
     },
     "ollama-vision": {
@@ -507,7 +606,7 @@ For local testing, this is also supported in the **current working directory**:
     "defaultJudge": "ollama-cloud-qwen3-coder-next",
     "defaultFormat": "pretty",
     "stream": true,
-    "commandTimeoutMs": 180000,
+    "commandTimeoutMs": 600000,
     "applyTimeoutMs": 300000
   }
 }
@@ -520,11 +619,17 @@ Notes:
   - `command`: actual executable command
   - optional `model`: if omitted/empty/`default`, CLI default model is used
   - if `model` is set (and command has no `--model`), da appends `--model <value>`
+- Web UI bridge providers use:
+  - `type: "web-ai-bridge"`
+  - `bridgeUrl`: local WebSocket bridge endpoint
+  - optional `model`: display-only metadata for the provider label
 - `ollama-compat` works with local Ollama **and** OpenAI-compatible cloud endpoints.
+- `ollamaTools.webSearch: true` enables app-managed `web_search` / `web_fetch` tool calls for Ollama.
 - API key setting options:
   - `ollama_api_key` (or `ollamaApiKey`) for Ollama Cloud
   - `openai_api_key` (or `openaiApiKey`, `apiKey`) directly in config
   - `apiKeyEnvVar` + environment variable
+- If the provider itself has no API key (for example local Ollama), Ollama web tools use `OLLAMA_API_KEY` by default.
 - For this project, set `baseUrl` to `https://ollama.com` (the runtime appends `/v1/...`).
 - Ollama Cloud recommends `apiKeyEnvVar: "OLLAMA_API_KEY"` and cloud models from `https://ollama.com/search?c=cloud&o=newest`.
 - Load priority for v2 config:
@@ -533,6 +638,59 @@ Notes:
   3. `~/.debate-arena/config.v2.json`
 - Dashboard provider dropdowns refresh automatically from this file.
 - Sample file: `config.v2.example.json`
+
+### Browser-backed providers via `web-ai-cli-bridge`
+
+If you want to use a browser tab as one side of the debate, configure a provider like this:
+
+```json
+{
+  "version": 2,
+  "providers": {
+    "grok-web-a": {
+      "type": "web-ai-bridge",
+      "bridgeUrl": "ws://127.0.0.1:17373",
+      "model": "grok.com",
+      "capabilities": { "supportsStreaming": true, "maxContextTokens": 128000 }
+    },
+    "claude": {
+      "type": "cli",
+      "command": "claude -p",
+      "model": "default",
+      "capabilities": { "supportsStreaming": true, "maxContextTokens": 200000 }
+    }
+  }
+}
+```
+
+Recommended setup:
+
+1. Start one bridge process per browser-backed participant.
+2. Attach each bridge to its own browser tab.
+3. Use a distinct provider id per bridge, such as `grok-web-a`, `grok-web-b`, `grok-web-judge`.
+
+Example:
+
+```bash
+# terminal 1
+cd /Users/namkwon/dev/extension-chrome
+npm run bridge
+
+# terminal 2
+cd /Users/namkwon/dev/extension-chrome
+BRIDGE_PORT=17473 npm run bridge
+
+# debate-arena
+da "/participants grok-web-a claude"
+da "/judge grok-web-b"
+```
+
+Operational note:
+
+- One bridge can process only one active request at a time, so two browser-backed debate participants should not share the same `bridgeUrl`.
+- Round 1 opening turns run in parallel, which means shared bridge URLs will collide immediately.
+- The browser extension must already be attached to the target tab before DEBATE ARENA sends a turn.
+- `/status` currently focuses on CLI providers; it does not yet probe `web-ai-bridge` connectivity.
 
 ## Troubleshooting
 

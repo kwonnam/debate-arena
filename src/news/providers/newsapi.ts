@@ -2,6 +2,22 @@ import type { NewsArticle } from '../snapshot.js';
 import type { NewsProvider, SearchOptions } from './types.js';
 
 const NEWSAPI_URL = 'https://newsapi.org/v2/everything';
+const SUPPORTED_NEWSAPI_LANGUAGES = new Set([
+  'ar',
+  'de',
+  'en',
+  'es',
+  'fr',
+  'he',
+  'it',
+  'nl',
+  'no',
+  'pt',
+  'ru',
+  'sv',
+  'ud',
+  'zh',
+]);
 
 interface NewsApiResponse {
   articles?: Array<{
@@ -24,9 +40,12 @@ export class NewsApiProvider implements NewsProvider {
     const params = new URLSearchParams({
       q: query,
       pageSize: String(options?.maxArticles ?? 10),
-      language: options?.language ?? 'en',
       sortBy: 'publishedAt',
     });
+    const normalizedLanguage = normalizeNewsApiLanguage(options?.language);
+    if (normalizedLanguage) {
+      params.set('language', normalizedLanguage);
+    }
 
     const response = await fetch(`${NEWSAPI_URL}?${params}`, {
       headers: { 'X-Api-Key': this.apiKey },
@@ -46,4 +65,13 @@ export class NewsApiProvider implements NewsProvider {
       relevanceScore: 0.7,
     }));
   }
+}
+
+function normalizeNewsApiLanguage(language?: string): string | undefined {
+  const normalized = language?.trim().toLowerCase();
+  if (!normalized) return 'en';
+  if (!SUPPORTED_NEWSAPI_LANGUAGES.has(normalized)) {
+    return undefined;
+  }
+  return normalized;
 }

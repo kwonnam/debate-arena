@@ -1,11 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { buildSynthesisPrompt, buildSynthesisPromptWithEvidence, buildRoundEvidenceSection } from './prompt-builder.js';
+import {
+  buildDebaterSystemPrompt,
+  buildDiscussionSynthesisPrompt,
+  buildRoundEvidenceSection,
+  buildSynthesisPrompt,
+  buildSynthesisPromptWithEvidence,
+} from './prompt-builder.js';
 import type { EvidenceSnapshot, NewsArticle } from '../news/snapshot.js';
 import type { DebateRoundState } from '../types/debate.js';
+import type { DebateParticipant } from '../types/roles.js';
 
 describe('buildSynthesisPromptWithEvidence', () => {
   const mockSnapshot: EvidenceSnapshot = {
     id: 'abc123',
+    kind: 'web',
     query: '트럼프 관세',
     collectedAt: '2026-03-02T00:00:00Z',
     sources: ['Brave Search'],
@@ -40,11 +48,32 @@ describe('buildSynthesisPromptWithEvidence', () => {
     expect(prompt).toContain('Reuters');
   });
 
+  it('web snapshot이면 웹 근거 범위를 표시한다', () => {
+    const prompt = buildSynthesisPromptWithEvidence('트럼프 관세', [], mockSnapshot);
+    expect(prompt).toContain('웹 Evidence Snapshot');
+    expect(prompt).toContain('범위: Web');
+  });
+
   it('snapshot 없이는 기존 buildSynthesisPrompt와 동일하게 동작한다', () => {
     const debateLog = [{ label: '백엔드 개발자' as const, round: 1, content: 'test' }];
     const withEvidence = buildSynthesisPromptWithEvidence('question', debateLog, undefined);
     const original = buildSynthesisPrompt('question', debateLog);
     expect(withEvidence).toBe(original);
+  });
+
+  it('discussion synthesis builder를 넘기면 해당 형식을 유지한다', () => {
+    const debateLog = [{ label: '백엔드 개발자' as const, round: 1, content: 'test' }];
+    const prompt = buildSynthesisPromptWithEvidence(
+      'question',
+      debateLog,
+      mockSnapshot,
+      [],
+      buildDiscussionSynthesisPrompt,
+    );
+
+    expect(prompt).toContain('## Shared Understanding');
+    expect(prompt).toContain('## Next Steps');
+    expect(prompt).toContain('출처 인용');
   });
 
   it('round state가 있으면 synthesis prompt에 압축 상태를 포함한다', () => {
@@ -124,6 +153,60 @@ describe('buildRoundEvidenceSection', () => {
     expect(result).toContain('Article 1');
     expect(result).toContain('Article 4');
     expect(result).not.toContain('Article 5');
-    expect(result).toContain('추가 기사 2건');
+    expect(result).toContain('추가 근거 2건');
+  });
+
+  it('web kind이면 웹 근거 라벨을 사용한다', () => {
+    const result = buildRoundEvidenceSection('unified', mockArticles, 'web');
+    expect(result).toContain('웹');
+    expect(result).toContain('## 참고 근거');
+  });
+});
+
+describe('buildDebaterSystemPrompt', () => {
+  const participant = {
+    id: 'gemini',
+    label: 'Gemini',
+    provider: 'gemini',
+    role: {
+      roleId: 'researcher',
+      roleLabel: 'Researcher',
+      focus: 'Verify fast-moving facts',
+      instructions: [],
+      requiredQuestions: [],
+    },
+  } satisfies DebateParticipant;
+
+  it('gemini에게 웹 검색 지침을 명시한다', () => {
+    const prompt = buildDebaterSystemPrompt(participant);
+    expect(prompt).toContain('built-in web search/fetch');
+    expect(prompt).toContain('short targeted searches');
+  });
+
+  it('ollama에게 snapshot 기반 제약을 명시한다', () => {
+    const ollamaPrompt = buildDebaterSystemPrompt({
+      ...participant,
+      id: 'ollama-local',
+      label: 'Ollama',
+      provider: 'ollama-local',
+    });
+    expect(ollamaPrompt).toContain('callable web tools are available');
+    expect(ollamaPrompt).toContain('Do not claim live web access');
+    expect(ollamaPrompt).toContain('shared evidence snapshot');
+  });
+});
+
+describe('buildDiscussionSynthesisPrompt', () => {
+  it('discussion memo 섹션을 요구한다', () => {
+    const prompt = buildDiscussionSynthesisPrompt('어떻게 정리할까?', [
+      { label: '분석가' as const, round: 1, content: '관점을 정리하자.' },
+    ]);
+
+    expect(prompt).toContain('collaborative discussion');
+    expect(prompt).toContain('## Shared Understanding');
+    expect(prompt).toContain('## Key Trade-offs');
+    expect(prompt).toContain('## Recommendation');
+    expect(prompt).toContain('## Open Questions');
+    expect(prompt).toContain('## Next Steps');
   });
 });

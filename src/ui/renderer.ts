@@ -154,7 +154,18 @@ export function renderJsonResult(result: DebateResult): void {
 }
 
 export function buildMarkdownContent(result: DebateResult): string {
-  let md = `# Debate: ${result.question}\n\n`;
+  const title = result.mode === 'plan'
+    ? 'Implementation Plan'
+    : result.mode === 'discussion'
+      ? 'Discussion'
+      : 'Debate';
+  const synthesisTitle = result.mode === 'plan'
+    ? 'Agreed Plan'
+    : result.mode === 'discussion'
+      ? 'Discussion Memo'
+      : 'Final Synthesis';
+
+  let md = `# ${title}: ${result.question}\n\n`;
 
   for (const msg of result.messages) {
     const label = participantStyle(msg.label).label;
@@ -174,7 +185,7 @@ export function buildMarkdownContent(result: DebateResult): string {
   }
 
   if (result.synthesis) {
-    md += `## Final Synthesis\n\n${result.synthesis}\n`;
+    md += `## ${synthesisTitle}\n\n${result.synthesis}\n`;
   }
 
   return md;

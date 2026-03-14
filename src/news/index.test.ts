@@ -11,6 +11,15 @@ vi.mock('./providers/brave.js', () => ({
   })),
 }));
 
+vi.mock('./providers/brave-web.js', () => ({
+  BraveWebProvider: vi.fn().mockImplementation(() => ({
+    name: 'Brave Web',
+    search: vi.fn().mockResolvedValue([
+      { title: 'Brave Web Result', source: 'Brave Web', url: 'https://brave.com/web', publishedAt: '2026-03-01', summary: 'web', relevanceScore: 0.85 },
+    ]),
+  })),
+}));
+
 vi.mock('./providers/newsapi.js', () => ({
   NewsApiProvider: vi.fn().mockImplementation(() => ({
     name: 'NewsAPI',
@@ -36,12 +45,14 @@ vi.mock('./snapshot-io.js', () => ({
 
 import { buildProvidersFromConfig, collectEvidence } from './index.js';
 import { BraveNewsProvider } from './providers/brave.js';
+import { BraveWebProvider } from './providers/brave-web.js';
 import { NewsApiProvider } from './providers/newsapi.js';
 import { RssProvider } from './providers/rss.js';
 
 const braveOnlyConfig: NewsConfig = {
   providers: {
     brave: { enabled: true },
+    braveWeb: { enabled: true },
     newsapi: { enabled: false },
     rss: { enabled: false, feeds: [] },
   },
@@ -52,6 +63,7 @@ const braveOnlyConfig: NewsConfig = {
 const allProvidersConfig: NewsConfig = {
   providers: {
     brave: { enabled: true },
+    braveWeb: { enabled: true },
     newsapi: { enabled: true },
     rss: { enabled: true, feeds: ['https://example.com/feed.xml'] },
   },
@@ -104,6 +116,12 @@ describe('buildProvidersFromConfig', () => {
     const providers = buildProvidersFromConfig(cfg);
     expect(NewsApiProvider).not.toHaveBeenCalled();
   });
+
+  it('web evidence면 BraveWebProvider를 사용한다', () => {
+    const providers = buildProvidersFromConfig(braveOnlyConfig, 'web');
+    expect(providers).toHaveLength(1);
+    expect(BraveWebProvider).toHaveBeenCalledWith('test-brave-key');
+  });
 });
 
 describe('collectEvidence', () => {
@@ -135,5 +153,11 @@ describe('collectEvidence', () => {
     const { writeSnapshot } = await import('./snapshot-io.js');
     await collectEvidence('query', undefined, braveOnlyConfig);
     expect(writeSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it('web evidence snapshot은 kind=web으로 저장한다', async () => {
+    const snapshot = await collectEvidence('query', { kind: 'web' }, braveOnlyConfig);
+    expect(snapshot.kind).toBe('web');
+    expect(snapshot.sources).toContain('Brave Web');
   });
 });

@@ -9,8 +9,12 @@ const replayButton = document.getElementById('replay');
 const replayInput = document.getElementById('replay-seq');
 const executeStatus = document.getElementById('execute-status');
 const stopSessionButton = document.getElementById('stop-session');
+const resumeSessionButton = document.getElementById('resume-session');
+const continueSessionButton = document.getElementById('continue-session');
 const stopTeamButton = document.getElementById('stop-team');
 const exportMarkdownButton = document.getElementById('export-md');
+const exportObsidianButton = document.getElementById('export-obsidian');
+const exportSlidesButton = document.getElementById('export-slides');
 const connBadge = document.getElementById('conn-badge');
 const roundProgress = document.getElementById('round-progress');
 const roundLabel = document.getElementById('round-label');
@@ -38,7 +42,12 @@ const projectJudgeSelect = projectForm?.querySelector('select[name="judge"]');
 
 const newsForm = document.getElementById('news-form');
 const newsQuestionInput = newsForm?.querySelector('[name="question"]');
+const newsEvidenceKindSelect = document.getElementById('news-evidence-kind');
 const newsQueryInput = document.getElementById('news-query');
+const newsQueryExpansionToggle = document.getElementById('news-query-expansion');
+const newsQueryLanguageScopeSelect = document.getElementById('news-query-language-scope');
+const newsOnlySourceInputs = Array.from(document.querySelectorAll('[data-news-only-source]'));
+const newsTemplateChips = Array.from(document.querySelectorAll('.template-chip[data-template-target="news"]'));
 const useNewsQuestionButton = document.getElementById('use-news-question');
 const newsCollectButton = document.getElementById('news-collect-btn');
 const newsCollectStatus = document.getElementById('news-collect-status');
@@ -134,6 +143,83 @@ const MIN_PARTICIPANTS = 2;
 const MAX_PARTICIPANTS = 6;
 const CUSTOM_ROLE_VALUE = '__custom__';
 const PARTICIPANT_SIDE_SEQUENCE = ['a', 'b', 'c'];
+
+function normalizeEvidenceKind(value) {
+  return value === 'web' ? 'web' : 'news';
+}
+
+function getEvidenceKindMeta(kind) {
+  const normalized = normalizeEvidenceKind(kind);
+  if (normalized === 'web') {
+    return {
+      kind: 'web',
+      label: '웹',
+      itemLabel: '웹 근거',
+      itemListLabel: '웹 근거 목록',
+      workflowLabel: '웹 근거 토론',
+      collectingLabel: '웹 근거를 수집하는 중입니다...',
+      collectFailedLabel: '웹 근거 수집에 실패했습니다.',
+      selectedLabel: '선택된 웹 근거 팩이 없습니다.',
+      connectedLabel: '웹 근거 팩',
+      emptyListLabel: '표시할 웹 근거가 없습니다.',
+      autoQuestionSuffix: '웹 자료의 의미와 향후 영향을 토론해줘',
+      questionPlaceholder: '예: 이 웹 자료가 우리 제품과 시장에 어떤 영향을 미칠지 토론해줘',
+      queryPlaceholder: '예: bun package manager roadmap 2026',
+      idleStatusLabel: '검색어를 입력한 뒤 웹 근거 팩을 수집하세요.',
+    };
+  }
+
+  return {
+    kind: 'news',
+    label: '뉴스',
+    itemLabel: '뉴스 근거',
+    itemListLabel: '기사 목록',
+    workflowLabel: '뉴스 근거 토론',
+    collectingLabel: '뉴스를 수집하는 중입니다...',
+    collectFailedLabel: '뉴스 수집에 실패했습니다.',
+    selectedLabel: '선택된 뉴스 근거 팩이 없습니다.',
+    connectedLabel: '뉴스 근거 팩',
+    emptyListLabel: '표시할 기사가 없습니다.',
+    autoQuestionSuffix: '뉴스의 의미와 향후 영향을 토론해줘',
+    questionPlaceholder: '예: 이 이슈가 우리 제품과 시장에 어떤 영향을 미칠지 토론해줘',
+    queryPlaceholder: '예: AI regulation Europe 2026',
+    idleStatusLabel: '검색어를 입력한 뒤 뉴스 근거 팩을 수집하세요.',
+  };
+}
+
+function getSelectedNewsEvidenceKind() {
+  return normalizeEvidenceKind(newsEvidenceKindSelect?.value);
+}
+
+function syncNewsEvidenceScopeUi() {
+  const meta = getEvidenceKindMeta(getSelectedNewsEvidenceKind());
+  const isNews = meta.kind === 'news';
+
+  newsOnlySourceInputs.forEach((input) => {
+    input.disabled = !isNews;
+  });
+
+  newsTemplateChips.forEach((chip) => {
+    const labelAttr = meta.kind === 'web' ? 'data-web-label' : 'data-news-label';
+    const templateAttr = meta.kind === 'web' ? 'data-web-template' : 'data-news-template';
+    const nextLabel = chip.getAttribute(labelAttr) || chip.textContent || '';
+    const nextTemplate = chip.getAttribute(templateAttr) || chip.getAttribute('data-template') || '';
+    chip.textContent = nextLabel;
+    chip.setAttribute('data-template', nextTemplate);
+  });
+
+  if (newsQuestionInput) {
+    newsQuestionInput.placeholder = meta.questionPlaceholder;
+  }
+
+  if (newsQueryInput) {
+    newsQueryInput.placeholder = meta.queryPlaceholder;
+  }
+
+  if (newsCollectStatus && !selectedSnapshotId) {
+    newsCollectStatus.textContent = meta.idleStatusLabel;
+  }
+}
 
 function createFallbackParticipant(provider, id, label) {
   return {
@@ -404,13 +490,18 @@ function formatDateTime(ts) {
   return date.toLocaleString();
 }
 
-function pageAllowsWorkflow(workflowKind) {
+function sessionHasEvidence(session) {
+  return Boolean(session?.evidence?.id);
+}
+
+function pageAllowsWorkflow(session) {
+  const workflowKind = session?.workflowKind;
   if (pageWorkflow === 'news') {
-    return workflowKind === 'news';
+    return sessionHasEvidence(session);
   }
 
   if (pageWorkflow === 'project') {
-    return workflowKind !== 'news';
+    return workflowKind === 'project' || (!sessionHasEvidence(session) && workflowKind !== 'news');
   }
 
   return true;
@@ -430,9 +521,18 @@ function shortPath(value) {
   return `...${value.slice(-45)}`;
 }
 
-function getWorkflowMeta(workflowKind) {
-  if (workflowKind === 'news') {
-    return { label: '뉴스 토론', className: 'workflow-news' };
+function getWorkflowMeta(workflowKind, evidenceKind) {
+  const normalizedEvidenceKind = evidenceKind === 'web'
+    ? 'web'
+    : evidenceKind === 'news'
+      ? 'news'
+      : undefined;
+  if (normalizedEvidenceKind === 'web') {
+    return { label: '웹 근거 토론', className: 'workflow-web' };
+  }
+
+  if (workflowKind === 'news' || normalizedEvidenceKind === 'news') {
+    return { label: '뉴스 근거 토론', className: 'workflow-news' };
   }
 
   if (workflowKind === 'project') {
@@ -442,8 +542,75 @@ function getWorkflowMeta(workflowKind) {
   return { label: '일반 토론', className: 'workflow-general' };
 }
 
+function getModeMeta(mode) {
+  if (mode === 'plan') {
+    return {
+      label: 'Plan',
+      title: 'Implementation Plan',
+      processLabel: 'Planning Process',
+      conclusionLabel: 'Agreed Plan',
+      roundStateLabel: 'Planning State',
+      openingLabel: 'Initial plan',
+      rebuttalLabel: 'Review',
+      filePrefix: 'plan',
+      sessionWord: '계획',
+    };
+  }
+
+  if (mode === 'discussion') {
+    return {
+      label: 'Discussion',
+      title: 'Discussion',
+      processLabel: 'Discussion Process',
+      conclusionLabel: 'Discussion Memo',
+      roundStateLabel: 'Discussion State',
+      openingLabel: 'Initial contribution',
+      rebuttalLabel: 'Follow-up',
+      filePrefix: 'discussion',
+      sessionWord: '토의',
+    };
+  }
+
+  return {
+    label: 'Debate',
+    title: 'Debate',
+    processLabel: 'Debate Process',
+    conclusionLabel: 'Final Conclusion',
+    roundStateLabel: 'Round State',
+    openingLabel: 'Opening',
+    rebuttalLabel: 'Rebuttal',
+    filePrefix: 'debate',
+    sessionWord: '토론',
+  };
+}
+
+function formatPhaseLabel(phase, mode) {
+  const modeMeta = getModeMeta(mode);
+  return phase === 'opening' ? modeMeta.openingLabel : modeMeta.rebuttalLabel;
+}
+
 function statusToClass(status) {
   return String(status || '').toUpperCase();
+}
+
+function canResumeSession(session) {
+  const status = String(session?.status || '').toUpperCase();
+  return status === 'FAILED' || status === 'CANCELLED';
+}
+
+function canContinueSession(session) {
+  const status = String(session?.status || '').toUpperCase();
+  return status === 'COMPLETED';
+}
+
+function getActiveTimeoutMs() {
+  const form = pageWorkflow === 'news' ? newsForm : projectForm;
+  const timeoutInput = form?.querySelector('input[name="timeoutSeconds"]');
+  const seconds = Number(timeoutInput?.value || '1800');
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 1800 * 1000;
+  }
+  return Math.trunc(seconds) * 1000;
 }
 
 function normalizeParticipants(participants) {
@@ -1445,7 +1612,7 @@ function renderRoleConfigPreviewMarkup(config) {
 
       return `
         <section class="role-config-preview-section">
-          <h3>${workflow === 'project' ? '프로젝트 개선' : '뉴스 기반 토론'}</h3>
+          <h3>${workflow === 'project' ? '프로젝트 개선' : '근거 기반 토론'}</h3>
           ${templates.map((template) => `
             <article class="role-config-preview-card">
               <strong>${escapeHtml(template.label)}</strong>
@@ -1548,7 +1715,7 @@ async function saveRoleConfigEditor() {
 function renderSessions(sessions) {
   if (!sessionList) return;
 
-  const visibleSessions = (sessions || []).filter((session) => pageAllowsWorkflow(session.workflowKind));
+  const visibleSessions = (sessions || []).filter((session) => pageAllowsWorkflow(session));
 
   if (visibleSessions.length === 0) {
     sessionList.innerHTML = '<p class="session-meta">아직 생성된 세션이 없습니다.</p>';
@@ -1558,8 +1725,9 @@ function renderSessions(sessions) {
   sessionList.innerHTML = visibleSessions
     .map((session) => {
       const active = session.sessionId === activeSessionId ? 'active' : '';
+      const evidenceMeta = getEvidenceKindMeta(session.evidence?.kind);
       const evidenceBadge = session.evidence
-        ? `<span class="meta-badge">Evidence ${escapeHtml(session.evidence.id)}</span>`
+        ? `<span class="meta-badge">${escapeHtml(evidenceMeta.itemLabel)} ${escapeHtml(session.evidence.id)}</span>`
         : '';
       const workspaceBadge = session.executionCwd
         ? `<span class="meta-badge">${escapeHtml(shortPath(session.executionCwd))}</span>`
@@ -1567,7 +1735,11 @@ function renderSessions(sessions) {
       const ollamaModelBadge = session.ollamaModel
         ? `<span class="meta-badge">Ollama ${escapeHtml(session.ollamaModel)}</span>`
         : '';
-      const workflowMeta = getWorkflowMeta(session.workflowKind);
+      const followUpBadge = session.continuedFromSessionId
+        ? `<span class="meta-badge">Follow-up</span>`
+        : '';
+      const workflowMeta = getWorkflowMeta(session.workflowKind, session.evidence?.kind);
+      const modeMeta = getModeMeta(session.mode);
       const participantLabel = formatParticipantsInline(session.participants);
 
       return `
@@ -1576,6 +1748,7 @@ function renderSessions(sessions) {
             <div class="session-tags">
               <span class="status-chip ${statusToClass(session.status)}">${escapeHtml(session.status)}</span>
               <span class="meta-badge workflow-chip ${workflowMeta.className}">${escapeHtml(workflowMeta.label)}</span>
+              <span class="meta-badge">${escapeHtml(modeMeta.label)}</span>
             </div>
             <span class="session-meta">${escapeHtml(formatTime(session.updatedAt))}</span>
           </div>
@@ -1585,6 +1758,7 @@ function renderSessions(sessions) {
             ${evidenceBadge}
             ${workspaceBadge}
             ${ollamaModelBadge}
+            ${followUpBadge}
           </div>
           <div class="session-meta-row">
             <span class="session-meta">${escapeHtml(session.eventCount)} events · ${escapeHtml(formatDateTime(session.createdAt))}</span>
@@ -1607,12 +1781,19 @@ function renderSessions(sessions) {
 function renderSessionBrief() {
   if (!sessionBrief) return;
 
+  if (resumeSessionButton) {
+    resumeSessionButton.disabled = !canResumeSession(activeSessionSummary);
+  }
+  if (continueSessionButton) {
+    continueSessionButton.disabled = !canContinueSession(activeSessionSummary);
+  }
+
   if (!activeSessionSummary) {
     sessionBrief.className = 'session-context';
     sessionBrief.innerHTML = `
       <div class="empty-state">
         <strong>선택된 세션이 없습니다.</strong>
-        <p>프로젝트 개선 또는 뉴스 토론을 시작하거나, 아래 세션을 선택하세요.</p>
+        <p>프로젝트 개선 또는 근거 기반 토론을 시작하거나, 아래 세션을 선택하세요.</p>
       </div>
     `;
     return;
@@ -1620,7 +1801,9 @@ function renderSessionBrief() {
 
   const evidence = activeSessionSummary.evidence;
   const workspace = activeSessionSummary.executionCwd;
-  const workflowMeta = getWorkflowMeta(activeSessionSummary.workflowKind);
+  const workflowMeta = getWorkflowMeta(activeSessionSummary.workflowKind, evidence?.kind);
+  const modeMeta = getModeMeta(activeSessionSummary.mode);
+  const evidenceMeta = getEvidenceKindMeta(evidence?.kind);
   const participantLabel = formatParticipantsInline(activeSessionSummary.participants);
 
   sessionBrief.className = 'session-context';
@@ -1632,20 +1815,29 @@ function renderSessionBrief() {
       </div>
       <div class="session-tags">
         <span class="meta-badge workflow-chip ${workflowMeta.className}">${escapeHtml(workflowMeta.label)}</span>
+        <span class="meta-badge">${escapeHtml(modeMeta.label)}</span>
         ${participantLabel ? `<span class="meta-badge">${escapeHtml(participantLabel)}</span>` : ''}
         ${activeSessionSummary.judge ? `<span class="meta-badge">Judge ${escapeHtml(activeSessionSummary.judge)}</span>` : ''}
         ${workspace ? `<span class="meta-badge">${escapeHtml(shortPath(workspace))}</span>` : ''}
-        ${evidence ? `<span class="meta-badge">Evidence ${escapeHtml(evidence.id)}</span>` : '<span class="meta-badge">Evidence 없음</span>'}
+        ${evidence ? `<span class="meta-badge">${escapeHtml(evidenceMeta.itemLabel)} ${escapeHtml(evidence.id)}</span>` : '<span class="meta-badge">근거 없음</span>'}
         ${activeSessionSummary.ollamaModel ? `<span class="meta-badge">Ollama ${escapeHtml(activeSessionSummary.ollamaModel)}</span>` : ''}
+        ${activeSessionSummary.resumedFromSessionId ? `<span class="meta-badge">Resume ${escapeHtml(activeSessionSummary.resumeStage || '')}</span>` : ''}
+        ${activeSessionSummary.continuedFromSessionId ? `<span class="meta-badge">Follow-up</span>` : ''}
       </div>
       <div class="session-description">
-        ${workflowMeta.label} 흐름에서 생성된 세션입니다.
+        ${workflowMeta.label} 흐름의 ${escapeHtml(modeMeta.sessionWord)} 세션입니다.
         ${workspace
           ? ` 실행 경로는 <code>${escapeHtml(workspace)}</code>입니다.`
           : ' 별도 실행 경로는 지정되지 않았습니다.'}
         ${evidence
-          ? ` 연결된 근거 팩은 "${escapeHtml(evidence.query)}" (${escapeHtml(evidence.articleCount)}건)입니다.`
+          ? ` 연결된 ${escapeHtml(evidenceMeta.itemLabel)}은 "${escapeHtml(evidence.query)}" (${escapeHtml(evidence.articleCount)}건)입니다.`
           : ' 근거 팩은 연결되지 않았습니다.'}
+        ${activeSessionSummary.resumedFromSessionId
+          ? ` 이 세션은 <code>${escapeHtml(activeSessionSummary.resumedFromSessionId)}</code>에서 ${escapeHtml(activeSessionSummary.resumeStage || '중단 지점')}부터 재시작한 실행입니다.`
+          : ''}
+        ${activeSessionSummary.continuedFromSessionId
+          ? ` 이 세션은 <code>${escapeHtml(activeSessionSummary.continuedFromSessionId)}</code>의 결론을 이어받아 시작한 후속 토론입니다.`
+          : ''}
       </div>
     </div>
   `;
@@ -1660,15 +1852,19 @@ function renderSnapshotSummary(title, summary, buttons = '') {
       ? summary.articles.length
       : null;
   const topDomains = Array.isArray(summary?.topDomains) ? summary.topDomains.slice(0, 2) : [];
+  const searchPlanBadges = getSearchPlanBadges(summary?.searchPlan);
+  const evidenceMeta = getEvidenceKindMeta(summary?.kind);
 
   return `
     <div class="selected-evidence-title"><strong>${escapeHtml(title)}</strong></div>
     <div class="summary-chip-row">
       ${summary?.id ? `<span class="meta-badge">${escapeHtml(summary.id)}</span>` : ''}
+      <span class="meta-badge">${escapeHtml(evidenceMeta.itemLabel)}</span>
       ${collectedAt ? `<span class="meta-badge">${escapeHtml(collectedAt)}</span>` : ''}
       ${articleCount !== null ? `<span class="meta-badge">${escapeHtml(articleCount)}건</span>` : ''}
       ${sourceCount ? `<span class="meta-badge">sources ${escapeHtml(sourceCount)}</span>` : ''}
       ${typeof summary?.excludedCount === 'number' ? `<span class="meta-badge">excluded ${escapeHtml(summary.excludedCount)}</span>` : ''}
+      ${searchPlanBadges.map((badge) => `<span class="meta-badge">${escapeHtml(badge)}</span>`).join('')}
       ${topDomains.map((domain) => `<span class="meta-badge">${escapeHtml(domain)}</span>`).join('')}
     </div>
     ${buttons}
@@ -1679,8 +1875,9 @@ function renderSelectedEvidence() {
   if (!selectedEvidence) return;
 
   if (!selectedSnapshotId) {
+    const evidenceMeta = getEvidenceKindMeta(getSelectedNewsEvidenceKind());
     selectedEvidence.className = 'selected-evidence-card empty';
-    selectedEvidence.innerHTML = '<div class="selected-evidence-empty">선택된 뉴스 근거 팩이 없습니다. 뉴스 토론 시작 시 자동 수집하거나, 아래 라이브러리에서 선택할 수 있습니다.</div>';
+    selectedEvidence.innerHTML = `<div class="selected-evidence-empty">${escapeHtml(evidenceMeta.selectedLabel)} ${escapeHtml(evidenceMeta.workflowLabel)} 시작 시 자동 수집하거나, 아래 라이브러리에서 선택할 수 있습니다.</div>`;
     return;
   }
 
@@ -1693,7 +1890,7 @@ function renderSelectedEvidence() {
     summary,
     `
       <div class="snapshot-actions">
-        <button class="button subtle mini-button" type="button" data-action="view-selected">기사 보기</button>
+        <button class="button subtle mini-button" type="button" data-action="view-selected">근거 보기</button>
         <button class="button subtle mini-button" type="button" data-action="clear-selected">해제</button>
       </div>
     `
@@ -1709,9 +1906,10 @@ function renderSelectedEvidence() {
 }
 
 function renderEvidencePackItems(detail) {
+  const evidenceMeta = getEvidenceKindMeta(detail?.kind);
   const articles = Array.isArray(detail?.articles) ? detail.articles.slice(0, 5) : [];
   if (articles.length === 0) {
-    return '<p class="session-meta">연결된 기사 목록을 아직 불러오지 못했습니다.</p>';
+    return `<p class="session-meta">연결된 ${escapeHtml(evidenceMeta.itemListLabel)}을 아직 불러오지 못했습니다.</p>`;
   }
 
   return articles
@@ -1809,6 +2007,8 @@ function renderSnapshots(snapshots) {
     .map((snapshot) => {
       const isSelected = snapshot.id === selectedSnapshotId ? 'selected' : '';
       const sourceCount = Array.isArray(snapshot.sources) ? snapshot.sources.length : '?';
+      const searchPlanBadges = getSearchPlanBadges(snapshot.searchPlan);
+      const evidenceMeta = getEvidenceKindMeta(snapshot.kind);
 
       return `
         <div class="snapshot-item ${isSelected}" data-snap-id="${escapeHtml(snapshot.id)}">
@@ -1820,8 +2020,10 @@ function renderSnapshots(snapshots) {
             <span class="session-meta">${escapeHtml(formatDate(snapshot.createdAt))}</span>
           </div>
           <div class="summary-chip-row">
+            <span class="meta-badge">${escapeHtml(evidenceMeta.itemLabel)}</span>
             <span class="meta-badge">${escapeHtml(snapshot.articleCount ?? 0)}건</span>
             <span class="meta-badge">sources ${escapeHtml(sourceCount)}</span>
+            ${searchPlanBadges.map((badge) => `<span class="meta-badge">${escapeHtml(badge)}</span>`).join('')}
           </div>
           <div class="snapshot-actions">
             <button class="button mini-button" type="button" data-action="use" data-snap-id="${escapeHtml(snapshot.id)}">선택</button>
@@ -1872,10 +2074,15 @@ async function useSnapshot(snapshotId) {
   if (debateSnapshotInput) {
     debateSnapshotInput.value = snapshotId;
   }
-  await loadSnapshotDetail(snapshotId);
-  if (newsCollectStatus) {
-    newsCollectStatus.textContent = `근거 팩 ${snapshotId}를 뉴스 토론에 연결했습니다.`;
+  const detail = await loadSnapshotDetail(snapshotId);
+  if (newsEvidenceKindSelect && detail?.kind) {
+    newsEvidenceKindSelect.value = normalizeEvidenceKind(detail.kind);
   }
+  if (newsCollectStatus) {
+    const evidenceMeta = getEvidenceKindMeta(detail?.kind);
+    newsCollectStatus.textContent = `${evidenceMeta.connectedLabel} ${snapshotId}를 토론에 연결했습니다.`;
+  }
+  syncNewsEvidenceScopeUi();
   renderSnapshots(cachedSnapshots);
   renderSelectedEvidence();
   renderEvidencePack();
@@ -1887,8 +2094,10 @@ function clearSelectedSnapshot() {
     debateSnapshotInput.value = '';
   }
   if (newsCollectStatus) {
-    newsCollectStatus.textContent = '뉴스 근거 팩 연결을 해제했습니다.';
+    const evidenceMeta = getEvidenceKindMeta(getSelectedNewsEvidenceKind());
+    newsCollectStatus.textContent = `${evidenceMeta.connectedLabel} 연결을 해제했습니다.`;
   }
+  syncNewsEvidenceScopeUi();
   renderSnapshots(cachedSnapshots);
   renderSelectedEvidence();
   renderEvidencePack();
@@ -1898,12 +2107,13 @@ async function viewSnapshot(snapshotId) {
   if (!modalTitle || !articleModal || !modalBody) return;
 
   const detail = await loadSnapshotDetail(snapshotId);
+  const evidenceMeta = getEvidenceKindMeta(detail?.kind);
 
-  modalTitle.textContent = `기사 목록 · ${snapshotId}`;
+  modalTitle.textContent = `${evidenceMeta.itemListLabel} · ${snapshotId}`;
   articleModal.style.display = 'flex';
 
   if (!detail || !Array.isArray(detail.articles) || detail.articles.length === 0) {
-    modalBody.innerHTML = '<p class="session-meta">표시할 기사가 없습니다.</p>';
+    modalBody.innerHTML = `<p class="session-meta">${escapeHtml(evidenceMeta.emptyListLabel)}</p>`;
     return;
   }
 
@@ -1929,7 +2139,7 @@ async function viewSnapshot(snapshotId) {
 async function viewCurrentEvidence() {
   const evidenceId = getDisplayedEvidenceId();
   if (!evidenceId) {
-    executeStatus.textContent = '먼저 뉴스 근거 팩을 선택하거나, 근거가 연결된 세션을 여세요.';
+    executeStatus.textContent = '먼저 근거 팩을 선택하거나, 근거가 연결된 세션을 여세요.';
     return;
   }
 
@@ -2107,7 +2317,7 @@ function resetLivePanels() {
 async function selectSession(sessionId) {
   activeSessionId = sessionId;
   activeSessionSummary = cachedSessions.find(
-    (session) => session.sessionId === sessionId && pageAllowsWorkflow(session.workflowKind)
+    (session) => session.sessionId === sessionId && pageAllowsWorkflow(session)
   ) || null;
   resetLivePanels();
 
@@ -2133,7 +2343,7 @@ async function refreshSessions() {
 
   cachedSessions = data.sessions || [];
   activeSessionSummary = cachedSessions.find(
-    (session) => session.sessionId === activeSessionId && pageAllowsWorkflow(session.workflowKind)
+    (session) => session.sessionId === activeSessionId && pageAllowsWorkflow(session)
   ) || null;
   renderSessions(cachedSessions);
   renderSessionBrief();
@@ -2348,7 +2558,13 @@ async function collectSnapshotFromNewsForm(options = { autoSelect: true, silent:
   }
 
   const formData = new FormData(newsForm);
+  const evidenceKind = normalizeEvidenceKind(formData.get('evidenceKind'));
+  const evidenceMeta = getEvidenceKindMeta(evidenceKind);
   const query = String(formData.get('query') || '').trim();
+  const queryTransformMode = formData.get('queryTransformEnabled') !== null ? 'expand' : 'off';
+  const queryLanguageScope = queryTransformMode === 'expand'
+    ? String(formData.get('queryLanguageScope') || 'both')
+    : 'input';
 
   if (!query) {
     if (!options.silent && newsCollectStatus) {
@@ -2358,7 +2574,7 @@ async function collectSnapshotFromNewsForm(options = { autoSelect: true, silent:
   }
 
   if (!options.silent && newsCollectStatus) {
-    newsCollectStatus.textContent = '뉴스를 수집하는 중입니다...';
+    newsCollectStatus.textContent = evidenceMeta.collectingLabel;
   }
   if (newsCollectButton) {
     newsCollectButton.disabled = true;
@@ -2369,8 +2585,11 @@ async function collectSnapshotFromNewsForm(options = { autoSelect: true, silent:
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query,
+      kind: evidenceKind,
       newsMode: 'split',
       sources: formData.getAll('sources').map(String),
+      queryTransformMode,
+      queryLanguageScope,
     }),
   });
 
@@ -2380,16 +2599,17 @@ async function collectSnapshotFromNewsForm(options = { autoSelect: true, silent:
 
   if (!ok) {
     if (!options.silent && newsCollectStatus) {
-      newsCollectStatus.textContent = data.error || '뉴스 수집에 실패했습니다.';
+      newsCollectStatus.textContent = data.error || evidenceMeta.collectFailedLabel;
     }
     return { ok: false, snapshotId: '' };
   }
 
   const snapshotId = data.snapshotId || data.id || '';
   const count = data.articleCount ?? data.count ?? '?';
+  const queryTransformSummary = getSearchPlanBadges(data.searchPlan).join(' · ');
 
   if (!options.silent && newsCollectStatus) {
-    newsCollectStatus.textContent = `근거 팩 ${snapshotId} 생성 완료 · ${count}건`;
+    newsCollectStatus.textContent = `${evidenceMeta.connectedLabel} ${snapshotId} 생성 완료 · ${count}건${queryTransformSummary ? ` · ${queryTransformSummary}` : ''}`;
   }
 
   if (snapshotList) {
@@ -2410,6 +2630,34 @@ function sanitizeFileName(value) {
     .slice(0, 60) || 'debate';
 }
 
+function getSearchPlanBadges(searchPlan) {
+  if (!searchPlan || !Array.isArray(searchPlan.queries) || searchPlan.queries.length === 0) {
+    return [];
+  }
+
+  const badges = [];
+  if (searchPlan.llmApplied) {
+    badges.push('LLM');
+  }
+
+  const languages = [...new Set(
+    searchPlan.queries
+      .map((query) => String(query?.language || '').trim().toUpperCase())
+      .filter(Boolean)
+  )];
+
+  if (languages.length > 0) {
+    badges.push(languages.join('/'));
+  }
+
+  return badges;
+}
+
+function syncNewsQueryTransformFields() {
+  if (!newsQueryExpansionToggle || !newsQueryLanguageScopeSelect) return;
+  newsQueryLanguageScopeSelect.disabled = !newsQueryExpansionToggle.checked;
+}
+
 function exportParticipantLabel(provider) {
   return provider === 'user' ? 'User' : provider;
 }
@@ -2423,34 +2671,86 @@ function exportSpeakerLabel(message) {
   return label || exportParticipantLabel(provider);
 }
 
-function buildSessionMarkdown(session, envelopes) {
+function collectSessionExportData(session, envelopes) {
   const events = (envelopes || []).map((envelope) => envelope.event);
-  const roundFinishedEvents = events.filter((event) => event.type === 'round_finished');
-  const roundStateEvents = events.filter((event) => event.type === 'round_state_ready');
-  const synthesisEvent = [...events].reverse().find(
-    (event) => event.type === 'synthesis_ready' && event.payload?.status === 'completed'
-  );
-  const errorEvents = events.filter((event) => event.type === 'error');
-  const cancelledEvent = [...events].reverse().find((event) => event.type === 'cancelled');
-  const workflowMeta = getWorkflowMeta(session?.workflowKind);
+  return {
+    events,
+    roundFinishedEvents: events.filter((event) => event.type === 'round_finished'),
+    roundStateEvents: events.filter((event) => event.type === 'round_state_ready'),
+    synthesisEvent: [...events].reverse().find(
+      (event) => event.type === 'synthesis_ready' && event.payload?.status === 'completed'
+    ),
+    errorEvents: events.filter((event) => event.type === 'error'),
+    cancelledEvent: [...events].reverse().find((event) => event.type === 'cancelled'),
+    workflowMeta: getWorkflowMeta(session?.workflowKind, session?.evidence?.kind),
+    modeMeta: getModeMeta(session?.mode),
+  };
+}
+
+function uniqueRoundStateItems(roundStateEvents, key) {
+  const seen = new Set();
+  const items = [];
+
+  for (const event of roundStateEvents || []) {
+    const values = Array.isArray(event?.payload?.[key]) ? event.payload[key] : [];
+    for (const value of values) {
+      const normalized = String(value || '').trim();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      items.push(normalized);
+    }
+  }
+
+  return items;
+}
+
+function yamlQuote(value) {
+  return `"${String(value ?? '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')}"`;
+}
+
+function pushQuotedBlock(lines, content, prefix = '> ') {
+  const normalized = String(content || '').trim();
+  if (!normalized) return;
+  normalized.split('\n').forEach((line) => {
+    lines.push(`${prefix}${line}`);
+  });
+}
+
+function buildSessionMarkdown(session, envelopes) {
+  const {
+    roundFinishedEvents,
+    roundStateEvents,
+    synthesisEvent,
+    errorEvents,
+    cancelledEvent,
+    workflowMeta,
+    modeMeta,
+  } = collectSessionExportData(session, envelopes);
 
   const lines = [];
-  lines.push(`# Debate: ${session?.question || 'Untitled'}`);
+  lines.push(`# ${modeMeta.title}: ${session?.question || 'Untitled'}`);
   lines.push('');
   lines.push(`- Session ID: \`${session?.sessionId || activeSessionId || 'unknown'}\``);
   lines.push(`- Status: \`${session?.status || 'unknown'}\``);
+  lines.push(`- Mode: \`${modeMeta.label}\``);
   if (session?.workflowKind) lines.push(`- Workflow: \`${workflowMeta.label}\``);
   if (session?.participants?.length) lines.push(`- Participants: \`${formatParticipantsInline(session.participants)}\``);
   if (session?.judge) lines.push(`- Judge: \`${session.judge}\``);
   if (session?.executionCwd) lines.push(`- Execution cwd: \`${session.executionCwd}\``);
-  if (session?.evidence?.id) lines.push(`- Evidence Pack: \`${session.evidence.id}\` (${session.evidence.articleCount} articles)`);
+  if (session?.evidence?.id) {
+    const evidenceMeta = getEvidenceKindMeta(session.evidence.kind);
+    lines.push(`- Evidence Pack: \`${session.evidence.id}\` (${evidenceMeta.itemLabel}, ${session.evidence.articleCount} entries)`);
+  }
   if (session?.ollamaModel) lines.push(`- Ollama Model: \`${session.ollamaModel}\``);
   if (session?.createdAt) lines.push(`- Created: ${formatDateTime(session.createdAt)}`);
   if (session?.updatedAt) lines.push(`- Updated: ${formatDateTime(session.updatedAt)}`);
   lines.push('');
 
   if (roundFinishedEvents.length > 0) {
-    lines.push('## Debate Process');
+    lines.push(`## ${modeMeta.processLabel}`);
     lines.push('');
 
     for (const roundEvent of roundFinishedEvents) {
@@ -2458,7 +2758,7 @@ function buildSessionMarkdown(session, envelopes) {
       lines.push('');
 
       for (const message of roundEvent.payload.messages) {
-        lines.push(`#### ${exportSpeakerLabel(message)} (${message.phase})`);
+        lines.push(`#### ${exportSpeakerLabel(message)} (${formatPhaseLabel(message.phase, session?.mode)})`);
         lines.push('');
         lines.push(message.content || '');
         lines.push('');
@@ -2466,7 +2766,7 @@ function buildSessionMarkdown(session, envelopes) {
 
       const roundState = roundStateEvents.find((event) => event.payload.round === roundEvent.payload.round);
       if (roundState) {
-        lines.push('#### Round State');
+        lines.push(`#### ${modeMeta.roundStateLabel}`);
         lines.push('');
         lines.push(roundState.payload.summary || '');
         lines.push('');
@@ -2481,13 +2781,13 @@ function buildSessionMarkdown(session, envelopes) {
       lines.push('');
     }
   } else {
-    lines.push('## Debate Process');
+    lines.push(`## ${modeMeta.processLabel}`);
     lines.push('');
-    lines.push('_No completed round messages found._');
+    lines.push(`_No completed ${modeMeta.sessionWord} round messages found._`);
     lines.push('');
   }
 
-  lines.push('## Final Conclusion');
+  lines.push(`## ${modeMeta.conclusionLabel}`);
   lines.push('');
 
   if (synthesisEvent?.payload?.content) {
@@ -2510,6 +2810,209 @@ function buildSessionMarkdown(session, envelopes) {
     }
     lines.push('');
   }
+
+  return lines.join('\n');
+}
+
+function buildSessionObsidianNote(session, envelopes) {
+  const {
+    roundFinishedEvents,
+    roundStateEvents,
+    synthesisEvent,
+    errorEvents,
+    cancelledEvent,
+    workflowMeta,
+    modeMeta,
+  } = collectSessionExportData(session, envelopes);
+  const evidenceMeta = session?.evidence ? getEvidenceKindMeta(session.evidence.kind) : null;
+  const keyIssues = uniqueRoundStateItems(roundStateEvents, 'keyIssues');
+  const agreements = uniqueRoundStateItems(roundStateEvents, 'agreements');
+  const nextFocus = uniqueRoundStateItems(roundStateEvents, 'nextFocus');
+  const summaryContent = synthesisEvent?.payload?.content
+    || (cancelledEvent ? `Session cancelled (${cancelledEvent.payload.reason}).` : '최종 정리 내용이 아직 없습니다.');
+
+  const lines = [];
+  lines.push('---');
+  lines.push(`title: ${yamlQuote(`${workflowMeta.label} - ${session?.question || 'Untitled'}`)}`);
+  lines.push(`session_id: ${yamlQuote(session?.sessionId || activeSessionId || 'unknown')}`);
+  lines.push(`status: ${yamlQuote(session?.status || 'unknown')}`);
+  lines.push(`workflow: ${yamlQuote(workflowMeta.label)}`);
+  lines.push(`mode: ${yamlQuote(modeMeta.label)}`);
+  if (session?.judge) lines.push(`judge: ${yamlQuote(session.judge)}`);
+  if (session?.executionCwd) lines.push(`execution_cwd: ${yamlQuote(session.executionCwd)}`);
+  if (session?.createdAt) lines.push(`created_at: ${yamlQuote(new Date(session.createdAt).toISOString())}`);
+  if (session?.updatedAt) lines.push(`updated_at: ${yamlQuote(new Date(session.updatedAt).toISOString())}`);
+  if (session?.evidence?.id) lines.push(`evidence_pack: ${yamlQuote(session.evidence.id)}`);
+  lines.push('participants:');
+  (session?.participants || []).forEach((participant) => {
+    lines.push(`  - ${yamlQuote(`${participant.label} (${participant.provider})`)}`);
+  });
+  lines.push('tags:');
+  lines.push('  - "debate-arena"');
+  lines.push(`  - ${yamlQuote(modeMeta.filePrefix)}`);
+  lines.push(`  - ${yamlQuote(String(session?.workflowKind || 'general'))}`);
+  if (session?.evidence?.kind) {
+    lines.push(`  - ${yamlQuote(session.evidence.kind)}`);
+  }
+  lines.push('---');
+  lines.push('');
+  lines.push(`# ${session?.question || 'Untitled'}`);
+  lines.push('');
+  lines.push('> [!summary] Session Summary');
+  pushQuotedBlock(lines, summaryContent);
+  lines.push('');
+
+  lines.push('## Context');
+  lines.push('');
+  lines.push(`- Workflow: ${workflowMeta.label}`);
+  lines.push(`- Mode: ${modeMeta.label}`);
+  if (session?.participants?.length) lines.push(`- Participants: ${formatParticipantsInline(session.participants)}`);
+  if (session?.judge) lines.push(`- Judge: ${session.judge}`);
+  if (session?.executionCwd) lines.push(`- Execution Cwd: \`${session.executionCwd}\``);
+  if (session?.evidence?.id) {
+    lines.push(`- Evidence Pack: ${session.evidence.id} (${evidenceMeta?.itemLabel || '근거'}, ${session.evidence.articleCount} entries)`);
+    lines.push(`- Evidence Query: ${session.evidence.query}`);
+  }
+  lines.push('');
+
+  lines.push('## Shared Agreements');
+  lines.push('');
+  if (agreements.length > 0) {
+    agreements.forEach((item) => lines.push(`- ${item}`));
+  } else {
+    lines.push('- 아직 명시적으로 합의된 내용이 없습니다.');
+  }
+  lines.push('');
+
+  lines.push('## Open Questions');
+  lines.push('');
+  if (keyIssues.length > 0) {
+    keyIssues.forEach((item) => lines.push(`- ${item}`));
+  } else {
+    lines.push('- 추가 확인이 필요한 쟁점이 아직 정리되지 않았습니다.');
+  }
+  lines.push('');
+
+  lines.push('## Next Actions');
+  lines.push('');
+  if (nextFocus.length > 0) {
+    nextFocus.forEach((item) => lines.push(`- ${item}`));
+  } else {
+    lines.push('- 후속 액션이 아직 정리되지 않았습니다.');
+  }
+  lines.push('');
+
+  lines.push('## Round Notes');
+  lines.push('');
+  if (roundFinishedEvents.length === 0) {
+    lines.push('- 완료된 라운드가 없습니다.');
+    lines.push('');
+  } else {
+    for (const roundEvent of roundFinishedEvents) {
+      const roundState = roundStateEvents.find((event) => event.payload.round === roundEvent.payload.round);
+      lines.push(`### Round ${roundEvent.payload.round}`);
+      lines.push('');
+      if (roundState?.payload?.summary) {
+        lines.push(roundState.payload.summary);
+        lines.push('');
+      }
+      if (Array.isArray(roundState?.payload?.keyIssues) && roundState.payload.keyIssues.length > 0) {
+        lines.push('Key issues:');
+        roundState.payload.keyIssues.forEach((item) => lines.push(`- ${item}`));
+        lines.push('');
+      }
+      if (Array.isArray(roundState?.payload?.agreements) && roundState.payload.agreements.length > 0) {
+        lines.push('Agreements:');
+        roundState.payload.agreements.forEach((item) => lines.push(`- ${item}`));
+        lines.push('');
+      }
+      if (Array.isArray(roundState?.payload?.nextFocus) && roundState.payload.nextFocus.length > 0) {
+        lines.push('Next focus:');
+        roundState.payload.nextFocus.forEach((item) => lines.push(`- ${item}`));
+        lines.push('');
+      }
+    }
+  }
+
+  if (errorEvents.length > 0 || cancelledEvent) {
+    lines.push('## Runtime Notes');
+    lines.push('');
+    errorEvents.forEach((event) => lines.push(`- Error [${event.payload.code}]: ${event.payload.message}`));
+    if (cancelledEvent) {
+      lines.push(`- Cancelled: ${cancelledEvent.payload.reason}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+function buildSessionSlidesOutline(session, envelopes) {
+  const {
+    roundStateEvents,
+    synthesisEvent,
+    cancelledEvent,
+    workflowMeta,
+    modeMeta,
+  } = collectSessionExportData(session, envelopes);
+  const evidenceMeta = session?.evidence ? getEvidenceKindMeta(session.evidence.kind) : null;
+  const keyIssues = uniqueRoundStateItems(roundStateEvents, 'keyIssues').slice(0, 6);
+  const agreements = uniqueRoundStateItems(roundStateEvents, 'agreements').slice(0, 6);
+  const nextFocus = uniqueRoundStateItems(roundStateEvents, 'nextFocus').slice(0, 6);
+  const latestState = roundStateEvents.length > 0 ? roundStateEvents[roundStateEvents.length - 1].payload : null;
+  const conclusion = synthesisEvent?.payload?.content
+    || (cancelledEvent ? `Session cancelled (${cancelledEvent.payload.reason}).` : '최종 결론이 아직 없습니다.');
+
+  const lines = [];
+  lines.push(`# Slide Outline: ${session?.question || 'Untitled'}`);
+  lines.push('');
+  lines.push('## Slide 1 - Problem');
+  lines.push(`- Question: ${session?.question || 'Untitled'}`);
+  lines.push(`- Workflow: ${workflowMeta.label}`);
+  lines.push(`- Mode: ${modeMeta.label}`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  lines.push('## Slide 2 - Context');
+  if (session?.participants?.length) lines.push(`- Participants: ${formatParticipantsInline(session.participants)}`);
+  if (session?.judge) lines.push(`- Judge: ${session.judge}`);
+  if (session?.executionCwd) lines.push(`- Execution cwd: ${session.executionCwd}`);
+  if (session?.evidence?.id) {
+    lines.push(`- Evidence pack: ${session.evidence.id} (${evidenceMeta?.itemLabel || '근거'}, ${session.evidence.articleCount} entries)`);
+    lines.push(`- Evidence query: ${session.evidence.query}`);
+  }
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  lines.push('## Slide 3 - Shared Signals');
+  if (agreements.length > 0) {
+    agreements.forEach((item) => lines.push(`- Agreement: ${item}`));
+  }
+  if (keyIssues.length > 0) {
+    keyIssues.forEach((item) => lines.push(`- Trade-off: ${item}`));
+  }
+  if (agreements.length === 0 && keyIssues.length === 0) {
+    lines.push(`- ${latestState?.summary || '정리된 핵심 신호가 아직 없습니다.'}`);
+  }
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  lines.push('## Slide 4 - Recommendation');
+  lines.push(conclusion);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  lines.push('## Slide 5 - Next Steps');
+  if (nextFocus.length > 0) {
+    nextFocus.forEach((item) => lines.push(`- ${item}`));
+  } else {
+    lines.push('- 후속 액션을 추가 정리해야 합니다.');
+  }
+  lines.push('');
 
   return lines.join('\n');
 }
@@ -2582,10 +3085,12 @@ if (replayButton && replayInput) {
 if (projectForm) {
   projectForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    executeStatus.textContent = '프로젝트 개선 토론을 시작하는 중입니다...';
 
     const formData = new FormData(projectForm);
     const question = String(formData.get('question') || '').trim();
+    const mode = String(formData.get('mode') || 'discussion');
+    const modeMeta = getModeMeta(mode);
+    executeStatus.textContent = `프로젝트 개선 ${modeMeta.sessionWord}를 시작하는 중입니다...`;
     const participantResult = resolveWorkflowParticipants('project');
 
     if (!question) {
@@ -2617,6 +3122,7 @@ if (projectForm) {
         question,
         rounds: totalRounds,
         judge,
+        mode,
         participants,
         noContext,
         executionCwd: executionCwd || undefined,
@@ -2637,25 +3143,44 @@ if (newsCollectButton) {
   });
 }
 
+if (newsEvidenceKindSelect) {
+  newsEvidenceKindSelect.addEventListener('change', () => {
+    syncNewsEvidenceScopeUi();
+    renderSelectedEvidence();
+  });
+  syncNewsEvidenceScopeUi();
+}
+
+if (newsQueryExpansionToggle) {
+  newsQueryExpansionToggle.addEventListener('change', () => {
+    syncNewsQueryTransformFields();
+  });
+  syncNewsQueryTransformFields();
+}
+
 if (newsForm) {
   newsForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    executeStatus.textContent = '뉴스 토론을 시작하는 중입니다...';
 
     const formData = new FormData(newsForm);
+    const mode = String(formData.get('mode') || 'discussion');
+    const modeMeta = getModeMeta(mode);
+    const evidenceKind = normalizeEvidenceKind(formData.get('evidenceKind'));
+    const submitMeta = getEvidenceKindMeta(evidenceKind);
+    executeStatus.textContent = `${submitMeta.label} ${modeMeta.sessionWord}를 시작하는 중입니다...`;
     const rawQuestion = String(formData.get('question') || '').trim();
     const query = String(formData.get('query') || '').trim();
-    const question = rawQuestion || (query ? `"${query}" 관련 최신 뉴스의 의미와 향후 영향을 토론해줘` : '');
+    const question = rawQuestion || (query ? `"${query}" 관련 최신 ${submitMeta.autoQuestionSuffix}` : '');
 
     if (!question) {
-      executeStatus.textContent = '뉴스 토론 질문이나 근거 탐색어를 입력하세요.';
+      executeStatus.textContent = `${submitMeta.label} 토론 질문이나 근거 탐색어를 입력하세요.`;
       return;
     }
 
     if (!selectedSnapshotId) {
       const collected = await collectSnapshotFromNewsForm({ autoSelect: true, silent: false });
       if (!collected.ok) {
-        executeStatus.textContent = '뉴스 토론을 시작하려면 먼저 근거 팩을 준비해야 합니다.';
+        executeStatus.textContent = `${submitMeta.label} 토론을 시작하려면 먼저 근거 팩을 준비해야 합니다.`;
         return;
       }
     }
@@ -2679,13 +3204,7 @@ if (newsForm) {
     const ollamaModel = String(formData.get('ollamaModel') || '').trim();
 
     if (!snapshotId) {
-      executeStatus.textContent = '선택된 뉴스 근거 팩이 없습니다.';
-      return;
-    }
-
-    if ([...participants.map((participant) => participant.provider), judge].includes('ollama') && !ollamaModel) {
-      executeStatus.textContent = '뉴스 토론에서 Ollama를 선택했다면 사용할 모델을 선택하세요.';
-      newsOllamaModelSelect?.focus();
+      executeStatus.textContent = `선택된 ${submitMeta.label} 근거 팩이 없습니다.`;
       return;
     }
 
@@ -2696,6 +3215,7 @@ if (newsForm) {
         question,
         rounds: totalRounds,
         judge,
+        mode,
         participants,
         noContext,
         executionCwd: executionCwd || undefined,
@@ -2727,6 +3247,82 @@ if (stopSessionButton) {
   });
 }
 
+if (resumeSessionButton) {
+  resumeSessionButton.addEventListener('click', async () => {
+    if (!activeSessionId) {
+      executeStatus.textContent = '먼저 세션을 선택하세요.';
+      return;
+    }
+
+    if (!canResumeSession(activeSessionSummary)) {
+      executeStatus.textContent = 'FAILED 또는 CANCELLED 세션만 이어서 재시작할 수 있습니다.';
+      return;
+    }
+
+    executeStatus.textContent = `${activeSessionId} 세션을 멈춘 지점부터 재시작하는 중입니다...`;
+    const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeoutMs: getActiveTimeoutMs() }),
+    });
+    if (!ok) {
+      executeStatus.textContent = data.error || '세션 재시작에 실패했습니다.';
+      return;
+    }
+
+    executeStatus.textContent = `${data.resumedFromSessionId || activeSessionId}에서 ${data.resumeStage || '중단 지점'}부터 새 세션 ${data.sessionId}로 재시작했습니다.`;
+    await refreshSessions();
+    if (data.sessionId) {
+      await selectSession(data.sessionId);
+    }
+  });
+}
+
+if (continueSessionButton) {
+  continueSessionButton.addEventListener('click', async () => {
+    if (!activeSessionId) {
+      executeStatus.textContent = '먼저 세션을 선택하세요.';
+      return;
+    }
+
+    if (!canContinueSession(activeSessionSummary)) {
+      executeStatus.textContent = 'COMPLETED 세션만 후속 토론으로 이어갈 수 있습니다.';
+      return;
+    }
+
+    const nextQuestion = window.prompt(
+      '이전 토론 결과를 바탕으로 이어갈 새 질문을 입력하세요.',
+      activeSessionSummary?.question || '',
+    );
+
+    if (!nextQuestion || !nextQuestion.trim()) {
+      executeStatus.textContent = '후속 토론 시작이 취소되었습니다.';
+      return;
+    }
+
+    executeStatus.textContent = `${activeSessionId} 결과를 바탕으로 후속 토론을 시작하는 중입니다...`;
+    const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/follow-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: nextQuestion.trim(),
+        timeoutMs: getActiveTimeoutMs(),
+      }),
+    });
+
+    if (!ok) {
+      executeStatus.textContent = data.error || '후속 토론 시작에 실패했습니다.';
+      return;
+    }
+
+    executeStatus.textContent = `${data.continuedFromSessionId || activeSessionId} 결과를 바탕으로 새 세션 ${data.sessionId} 후속 토론을 시작했습니다.`;
+    await refreshSessions();
+    if (data.sessionId) {
+      await selectSession(data.sessionId);
+    }
+  });
+}
+
 if (stopTeamButton) {
   stopTeamButton.addEventListener('click', async () => {
     executeStatus.textContent = '실행 중인 모든 세션을 중지하는 중입니다...';
@@ -2742,38 +3338,75 @@ if (stopTeamButton) {
   });
 }
 
+async function fetchActiveSessionExportPayload(statusLabel) {
+  if (!activeSessionId) {
+    executeStatus.textContent = '먼저 세션을 선택하세요.';
+    return { ok: false };
+  }
+
+  executeStatus.textContent = `${activeSessionId} 세션을 ${statusLabel} 형식으로 내보내는 중입니다...`;
+  const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/events?fromSequence=1`);
+  if (!ok) {
+    executeStatus.textContent = data.error || '세션 이벤트를 불러오지 못했습니다.';
+    return { ok: false };
+  }
+
+  const session = cachedSessions.find((item) => item.sessionId === activeSessionId);
+  if (!session) {
+    executeStatus.textContent = '선택한 세션 요약을 찾지 못했습니다.';
+    return { ok: false };
+  }
+
+  return { ok: true, session, events: data.events || [] };
+}
+
 if (exportMarkdownButton) {
   exportMarkdownButton.addEventListener('click', async () => {
-    if (!activeSessionId) {
-      executeStatus.textContent = '먼저 세션을 선택하세요.';
-      return;
-    }
+    const result = await fetchActiveSessionExportPayload('Markdown');
+    if (!result.ok) return;
 
-    executeStatus.textContent = `${activeSessionId} 세션을 Markdown으로 내보내는 중입니다...`;
-    const { ok, data } = await fetchJson(`/api/sessions/${activeSessionId}/events?fromSequence=1`);
-    if (!ok) {
-      executeStatus.textContent = data.error || '세션 이벤트를 불러오지 못했습니다.';
-      return;
-    }
-
-    const session = cachedSessions.find((item) => item.sessionId === activeSessionId);
-    const markdown = buildSessionMarkdown(session, data.events || []);
-    const filename = `${sanitizeFileName(session?.question || activeSessionId)}-${activeSessionId.slice(0, 8)}.md`;
+    const markdown = buildSessionMarkdown(result.session, result.events);
+    const filename = `${sanitizeFileName(result.session.question || activeSessionId)}-${activeSessionId.slice(0, 8)}.md`;
     downloadTextFile(filename, markdown, 'text/markdown;charset=utf-8');
     executeStatus.textContent = `Markdown을 내보냈습니다: ${filename}`;
   });
 }
 
+if (exportObsidianButton) {
+  exportObsidianButton.addEventListener('click', async () => {
+    const result = await fetchActiveSessionExportPayload('Obsidian');
+    if (!result.ok) return;
+
+    const note = buildSessionObsidianNote(result.session, result.events);
+    const filename = `${sanitizeFileName(result.session.question || activeSessionId)}-${activeSessionId.slice(0, 8)}-obsidian.md`;
+    downloadTextFile(filename, note, 'text/markdown;charset=utf-8');
+    executeStatus.textContent = `Obsidian 노트를 내보냈습니다: ${filename}`;
+  });
+}
+
+if (exportSlidesButton) {
+  exportSlidesButton.addEventListener('click', async () => {
+    const result = await fetchActiveSessionExportPayload('슬라이드 개요');
+    if (!result.ok) return;
+
+    const outline = buildSessionSlidesOutline(result.session, result.events);
+    const filename = `${sanitizeFileName(result.session.question || activeSessionId)}-${activeSessionId.slice(0, 8)}-slides.md`;
+    downloadTextFile(filename, outline, 'text/markdown;charset=utf-8');
+    executeStatus.textContent = `슬라이드 개요를 내보냈습니다: ${filename}`;
+  });
+}
+
 if (useNewsQuestionButton && newsQuestionInput && newsQueryInput) {
   useNewsQuestionButton.addEventListener('click', () => {
+    const evidenceMeta = getEvidenceKindMeta(getSelectedNewsEvidenceKind());
     const question = String(newsQuestionInput.value || '').trim();
     if (!question) {
-      newsCollectStatus.textContent = '먼저 뉴스 토론 질문을 입력하세요.';
+      newsCollectStatus.textContent = `먼저 ${evidenceMeta.label} 토론 질문을 입력하세요.`;
       return;
     }
 
     newsQueryInput.value = question;
-    newsCollectStatus.textContent = '뉴스 토론 질문을 근거 탐색어로 복사했습니다.';
+    newsCollectStatus.textContent = `${evidenceMeta.label} 토론 질문을 근거 탐색어로 복사했습니다.`;
   });
 }
 

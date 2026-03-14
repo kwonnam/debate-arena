@@ -95,6 +95,7 @@ export function migrateToV2(v1: AppConfig): ConfigV2 {
     providers['codex'] = {
       type: 'cli',
       command: v1.codexCommand,
+      webSearch: Boolean(v1.codexWebSearch),
       model: v1.codexModel || '',
       capabilities: { supportsStreaming: true, maxContextTokens: 128_000 },
     };
@@ -103,6 +104,9 @@ export function migrateToV2(v1: AppConfig): ConfigV2 {
     providers['claude'] = {
       type: 'cli',
       command: v1.claudeCommand,
+      mcpConfigs: splitCsv(v1.claudeMcpConfig),
+      strictMcpConfig: Boolean(v1.claudeStrictMcpConfig),
+      allowedTools: splitCsv(v1.claudeAllowedTools),
       model: v1.claudeModel || '',
       capabilities: { supportsStreaming: true, maxContextTokens: 200_000 },
     };
@@ -200,4 +204,11 @@ export function resolveCommands(config: AppConfig): {
     commandTimeoutMs: Number(process.env.AGENT_COMMAND_TIMEOUT_MS || config.commandTimeoutMs),
     applyTimeoutMs: config.applyTimeoutMs,
   };
+}
+
+function splitCsv(value: string | undefined): string[] {
+  return String(value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

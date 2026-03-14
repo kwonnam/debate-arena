@@ -30,8 +30,16 @@ export function InputPrompt({ debateMode, onSubmit, onSlash, onInterrupt, onEof,
     }
   });
 
-  const modeColor = debateMode === 'plan' ? 'blue' : 'green';
-  const modeLabel = debateMode === 'plan' ? 'plan' : 'debate';
+  const modeColor = debateMode === 'plan'
+    ? 'blue'
+    : debateMode === 'discussion'
+      ? 'cyan'
+      : 'green';
+  const modeLabel = debateMode === 'plan'
+    ? 'plan'
+    : debateMode === 'discussion'
+      ? 'discussion'
+      : 'debate';
 
   return (
     <Box>

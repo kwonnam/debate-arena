@@ -21,7 +21,7 @@
         <nav class="page-switcher" aria-label="워크벤치 이동">
           <a class="page-link" href="/">허브</a>
           <a class="page-link is-active" href="/project.html">프로젝트 개선</a>
-          <a class="page-link" href="/news.html">뉴스 기반 토론</a>
+          <a class="page-link" href="/news.html">근거 기반 토론</a>
           <a class="page-link" href="/settings.html">설정</a>
         </nav>
         <div class="header-toolbar">
@@ -64,6 +64,8 @@
       <div class="gap-banner" id="gap-banner" style="display:none">⚠️ 이벤트 간극 감지, 1번부터 다시 재생합니다.</div>
       <div class="runtime-actions">
         <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
+        <button class="button subtle runtime-btn" type="button" id="resume-session">멈춘 지점부터 재시작</button>
+        <button class="button subtle runtime-btn" type="button" id="continue-session">결과 기반 후속 토론</button>
         <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
         <label class="runtime-label">
           Replay from
@@ -71,6 +73,8 @@
         </label>
         <button class="button subtle runtime-btn" id="replay" type="button">재생</button>
         <button class="button subtle runtime-btn" id="export-md" type="button">마크다운 내보내기</button>
+        <button class="button subtle runtime-btn" id="export-obsidian" type="button">Obsidian 노트</button>
+        <button class="button subtle runtime-btn" id="export-slides" type="button">슬라이드 개요</button>
       </div>
       <p class="form-status" id="execute-status"></p>
     </div>
@@ -125,6 +129,15 @@
             </div>
 
             <div class="field">
+              <label>진행 방식</label>
+              <select name="mode">
+                <option value="discussion" selected>Discussion · 함께 정리</option>
+                <option value="debate">Debate · 논점 대결</option>
+              </select>
+              <small class="field-hint">Discussion은 합의점, 남은 쟁점, 다음 액션 중심으로 정리합니다.</small>
+            </div>
+
+            <div class="field">
               <label>로컬 프로젝트 경로</label>
               <input name="executionCwd" id="project-execution-cwd" placeholder="/absolute/path or ./relative" />
               <small class="field-hint" id="project-runtime-hint">현재 로컬 작업 디렉터리를 기본값으로 채웁니다.</small>
@@ -146,7 +159,7 @@
                 </div>
                 <div class="field">
                   <label>Timeout (s)</label>
-                  <input name="timeoutSeconds" type="number" min="30" max="1800" value="900" />
+                  <input name="timeoutSeconds" type="number" min="30" max="1800" value="1800" />
                 </div>
               </div>
 
@@ -214,7 +227,7 @@
             </div>
 
             <div class="execute-actions">
-              <button class="button" type="submit">프로젝트 개선 토론 시작</button>
+              <button class="button" type="submit">프로젝트 개선 세션 시작</button>
             </div>
           </form>
         </section>

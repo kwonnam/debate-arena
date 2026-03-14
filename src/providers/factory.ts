@@ -1,5 +1,6 @@
+import { resolve as resolvePath } from 'node:path';
 import { loadConfig, loadConfigV2, resolveCommands } from '../config/manager.js';
-import type { ProviderConfig } from '../config/defaults.js';
+import type { OllamaToolConfig, ProviderConfig } from '../config/defaults.js';
 import type { ProviderName } from '../types/debate.js';
 import type { DebateParticipant } from '../types/roles.js';
 import type { ModelInfo } from './base-http-provider.js';
@@ -9,6 +10,7 @@ import { ClaudeProvider } from './claude.js';
 import { CodexProvider } from './codex.js';
 import { GeminiProvider } from './gemini.js';
 import { OllamaCompatProvider } from './ollama-compat.js';
+import { WebAiBridgeProvider } from './web-ai-bridge.js';
 
 export interface ProviderOption {
   name: ProviderName;
@@ -22,10 +24,16 @@ interface ResolvedProviderEntry {
   id: ProviderName;
   type: ProviderConfig['type'];
   command?: string;
+  webSearch?: boolean;
+  mcpConfigs?: string[];
+  strictMcpConfig?: boolean;
+  allowedTools?: string[];
   baseUrl?: string;
+  bridgeUrl?: string;
   apiKeyEnvVar?: string;
   apiKey?: string;
   model?: string;
+  ollamaTools?: OllamaToolConfig;
   timeoutMs: number;
   source: 'v2' | 'legacy';
 }
@@ -51,6 +59,7 @@ function resolveLegacyProviderEntries(): Map<ProviderName, ResolvedProviderEntry
     id: 'codex',
     type: 'cli',
     command: commands.codexCommand,
+    webSearch: Boolean(config.codexWebSearch),
     model: config.codexModel,
     timeoutMs: commands.commandTimeoutMs,
     source: 'legacy',
@@ -60,6 +69,9 @@ function resolveLegacyProviderEntries(): Map<ProviderName, ResolvedProviderEntry
     id: 'claude',
     type: 'cli',
     command: commands.claudeCommand,
+    mcpConfigs: splitCsv(config.claudeMcpConfig),
+    strictMcpConfig: Boolean(config.claudeStrictMcpConfig),
+    allowedTools: splitCsv(config.claudeAllowedTools),
     model: config.claudeModel,
     timeoutMs: commands.commandTimeoutMs,
     source: 'legacy',
@@ -103,13 +115,19 @@ function resolveV2ProviderEntries(): Map<ProviderName, ResolvedProviderEntry> {
       id,
       type: provider.type,
       command: provider.command,
+      webSearch: provider.webSearch,
+      mcpConfigs: provider.mcpConfigs,
+      strictMcpConfig: provider.strictMcpConfig,
+      allowedTools: provider.allowedTools,
       baseUrl: provider.baseUrl,
+      bridgeUrl: provider.bridgeUrl,
       apiKeyEnvVar: provider.apiKeyEnvVar,
       apiKey: provider.apiKey
         ?? provider.openaiApiKey
         ?? provider.openai_api_key
         ?? provider.ollamaApiKey
         ?? provider.ollama_api_key,
+      ollamaTools: provider.ollamaTools,
       model: provider.model,
       timeoutMs,
       source: 'v2',
@@ -125,7 +143,16 @@ function resolveProviderEntries(): Map<ProviderName, ResolvedProviderEntry> {
 
   const merged = new Map<ProviderName, ResolvedProviderEntry>(legacy);
   for (const [id, entry] of v2.entries()) {
-    merged.set(id, entry);
+    const legacyEntry = merged.get(id);
+    merged.set(id, {
+      ...legacyEntry,
+      ...entry,
+      webSearch: entry.webSearch ?? legacyEntry?.webSearch,
+      mcpConfigs: entry.mcpConfigs ?? legacyEntry?.mcpConfigs,
+      strictMcpConfig: entry.strictMcpConfig ?? legacyEntry?.strictMcpConfig,
+      allowedTools: entry.allowedTools ?? legacyEntry?.allowedTools,
+      ollamaTools: entry.ollamaTools ?? legacyEntry?.ollamaTools,
+    });
   }
   return merged;
 }
@@ -134,7 +161,7 @@ function applyProviderOverrides(
   entry: ResolvedProviderEntry,
   overrides?: ProviderOverrides,
 ): ResolvedProviderEntry {
-  if (entry.id !== 'ollama') {
+  if (entry.type !== 'ollama-compat') {
     return entry;
   }
 
@@ -185,6 +212,13 @@ function validateProviderEntry(entry: ResolvedProviderEntry): string | null {
     return null;
   }
 
+  if (entry.type === 'web-ai-bridge') {
+    if (!entry.bridgeUrl || !entry.bridgeUrl.trim()) {
+      return 'Missing bridgeUrl';
+    }
+    return null;
+  }
+
   if (entry.type === 'anthropic') {
     return 'anthropic type is not implemented yet (use cli or ollama-compat)';
   }
@@ -223,7 +257,15 @@ function instantiateProvider(entry: ResolvedProviderEntry): AIProvider {
       entry.timeoutMs,
       undefined,
       entry.model?.trim() || '',
+      entry.ollamaTools,
     );
+  }
+
+  if (entry.type === 'web-ai-bridge') {
+    if (!entry.bridgeUrl?.trim()) {
+      throw new Error(`Provider '${entry.id}' is missing bridgeUrl`);
+    }
+    return new WebAiBridgeProvider(entry.id, entry.bridgeUrl.trim(), entry.timeoutMs);
   }
 
   throw new Error(`Provider type '${entry.type}' is not supported yet`);
@@ -232,22 +274,115 @@ function instantiateProvider(entry: ResolvedProviderEntry): AIProvider {
 function resolveCliCommand(entry: ResolvedProviderEntry): string {
   const base = entry.command?.trim() || '';
   if (!base) return '';
+
+  if (entry.id === 'codex' || isLikelyCodexCliCommand(base)) {
+    return buildCodexCliCommand(base, entry.model, entry.webSearch);
+  }
+
+  if (entry.id === 'claude' || isLikelyClaudeCliCommand(base)) {
+    return buildClaudeCliCommand(base, {
+      model: entry.model,
+      mcpConfigs: entry.mcpConfigs,
+      strictMcpConfig: entry.strictMcpConfig,
+      allowedTools: entry.allowedTools,
+    });
+  }
+
   const model = normalizeCliModel(entry.model);
   if (!model) return base;
   if (base.includes('--model ')) return base;
 
-  if (entry.id === 'codex') {
-    if (base.endsWith(' -')) {
-      return `${base.slice(0, base.lastIndexOf('-')).trimEnd()} --model ${model} -`;
-    }
-    return `${base} --model ${model}`;
-  }
-
-  if (entry.id === 'claude' || entry.id === 'gemini') {
+  if (entry.id === 'gemini') {
     return `${base} --model ${model}`;
   }
 
   return base;
+}
+
+export function buildCodexCliCommand(
+  command: string,
+  model?: string,
+  webSearch?: boolean,
+): string {
+  let resolved = command.trim();
+  if (!resolved) return '';
+
+  if (webSearch) {
+    resolved = insertCodexWebSearch(resolved);
+  }
+
+  const normalizedModel = normalizeCliModel(model);
+  if (!normalizedModel || resolved.includes('--model ')) {
+    return resolved;
+  }
+
+  if (resolved.endsWith(' -')) {
+    return `${resolved.slice(0, resolved.lastIndexOf('-')).trimEnd()} --model ${normalizedModel} -`;
+  }
+
+  return `${resolved} --model ${normalizedModel}`;
+}
+
+function insertCodexWebSearch(command: string): string {
+  if (!isLikelyCodexCliCommand(command) || /\s--search(?:\s|$)/.test(command)) {
+    return command;
+  }
+
+  const match = /\bexec\b/.exec(command);
+  if (!match || match.index <= 0) {
+    return command;
+  }
+
+  const prefix = command.slice(0, match.index).trimEnd();
+  const suffix = command.slice(match.index);
+  return `${prefix} --search ${suffix}`;
+}
+
+function isLikelyCodexCliCommand(command: string): boolean {
+  return /\b(?:codex|@openai\/codex)\b/.test(command);
+}
+
+interface ClaudeCliOptions {
+  model?: string;
+  mcpConfigs?: string[];
+  strictMcpConfig?: boolean;
+  allowedTools?: string[];
+}
+
+export function buildClaudeCliCommand(
+  command: string,
+  options: ClaudeCliOptions = {},
+): string {
+  let resolved = command.trim();
+  if (!resolved) return '';
+
+  const model = normalizeCliModel(options.model);
+  if (model && !resolved.includes('--model ')) {
+    resolved += ` --model ${model}`;
+  }
+
+  const mcpConfigs = normalizeMcpConfigPaths(options.mcpConfigs);
+  for (const mcpConfig of mcpConfigs) {
+    const quoted = shellQuote(mcpConfig);
+    if (!resolved.includes(`--mcp-config ${quoted}`)) {
+      resolved += ` --mcp-config ${quoted}`;
+    }
+  }
+
+  if (options.strictMcpConfig && !/\s--strict-mcp-config(?:\s|$)/.test(resolved)) {
+    resolved += ' --strict-mcp-config';
+  }
+
+  const allowedTools = normalizeStringList(options.allowedTools);
+  if (allowedTools.length > 0 && !resolved.includes('--allowedTools') && !resolved.includes('--allowed-tools')) {
+    resolved += ` --allowedTools ${shellQuote(allowedTools.join(','))}`;
+  }
+
+  return resolved.trim();
+}
+
+function isLikelyClaudeCliCommand(command: string): boolean {
+  return /\bclaude\b/.test(command);
 }
 
 function normalizeCliModel(raw?: string): string {
@@ -270,6 +405,40 @@ function normalizeDisplayModel(raw?: string): string {
   if (!value) return '';
   if (value.toLowerCase() === 'default') return '';
   return value;
+}
+
+function normalizeStringList(values?: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values ?? []) {
+    const item = value.trim();
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
+    normalized.push(item);
+  }
+
+  return normalized;
+}
+
+function normalizeMcpConfigPaths(values?: string[]): string[] {
+  return normalizeStringList(values).map((value) => {
+    if (value.startsWith('/')) {
+      return value;
+    }
+    return resolvePath(value);
+  });
+}
+
+function splitCsv(value: string | undefined): string[] {
+  return String(value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function shellQuote(value: string): string {
+  return JSON.stringify(value);
 }
 
 function normalizeRequestedProvider(raw: unknown): ProviderName {

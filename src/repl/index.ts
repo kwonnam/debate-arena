@@ -13,6 +13,8 @@ import type { CommandContext } from './registry.js';
 import type { DebateMode } from '../types/debate.js';
 import type { CliArgs } from './cli-args.js';
 import { collectEvidence } from '../news/index.js';
+import type { EvidenceKind } from '../news/snapshot.js';
+import type { SearchLanguageScope } from '../news/search-plan.js';
 
 declare const PKG_VERSION: string;
 
@@ -57,32 +59,41 @@ export async function startRepl(cliArgs?: CliArgs): Promise<void> {
   console.log(chalk.dim(`  v${PKG_VERSION} Type /help for commands, /exit to quit.\n`));
 
   const config = loadConfig();
+  const cliEvidence = resolveCliEvidenceRequest(cliArgs);
   let session = createDefaultSession({
     rounds: config.defaultRounds,
     judge: config.defaultJudge,
     format: config.defaultFormat,
     stream: config.stream,
-    newsQuiet: cliArgs?.newsQuiet,
-    newsMode: cliArgs?.newsMode,
+    newsQuiet: cliEvidence?.quiet,
+    newsMode: cliEvidence?.mode,
   });
 
-  // --news 또는 --news-snapshot 플래그 처리
-  if (cliArgs?.news || cliArgs?.newsSnapshot) {
+  if (cliEvidence) {
     const query = cliArgs.question ?? '';
-    if (!query && !cliArgs.newsSnapshot) {
-      console.log(chalk.yellow('  --news 플래그 사용 시 검색어가 필요합니다.'));
-      console.log(chalk.dim('  예: ffm --news "Trump tariffs"\n'));
+    if (!query && !cliEvidence.snapshotFile) {
+      const flag = cliEvidence.kind === 'web' ? '--web' : '--news';
+      console.log(chalk.yellow(`  ${flag} 플래그 사용 시 검색어가 필요합니다.`));
+      console.log(chalk.dim(`  예: ffm ${flag} "Trump tariffs"\n`));
     } else {
       try {
-        console.log(`  ${chalk.cyan('📰')} 뉴스 수집 중...\n`);
+        const scopeLabel = cliEvidence.kind === 'web' ? '웹 근거' : '뉴스';
+        const scopeEmoji = cliEvidence.kind === 'web' ? '🌐' : '📰';
+        console.log(`  ${chalk.cyan(scopeEmoji)} ${scopeLabel} 수집 중...\n`);
         const configV2 = loadConfigV2();
         const newsConfig = configV2.news ?? DEFAULT_NEWS_CONFIG;
         const snapshot = await collectEvidence(query, {
-          snapshotFile: cliArgs.newsSnapshot,
-          quiet: cliArgs.newsQuiet,
+          kind: cliEvidence.kind,
+          snapshotFile: cliEvidence.snapshotFile,
+          quiet: cliEvidence.quiet,
+          queryTransform: {
+            mode: cliEvidence.queryTransformMode,
+            languageScope: cliEvidence.queryLanguageScope,
+          },
         }, newsConfig);
-        if (!cliArgs.newsQuiet) {
-          console.log(`  수집된 기사 (${snapshot.articles.length}건):`);
+        if (!cliEvidence.quiet) {
+          const itemLabel = cliEvidence.kind === 'web' ? '수집된 웹 근거' : '수집된 기사';
+          console.log(`  ${itemLabel} (${snapshot.articles.length}건):`);
           snapshot.articles.forEach((a, i) => {
             console.log(`  ${i + 1}. [${a.source}] ${a.title}`);
           });
@@ -92,8 +103,9 @@ export async function startRepl(cliArgs?: CliArgs): Promise<void> {
         session = { ...session, snapshot };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        console.log(chalk.red(`  뉴스 수집 실패: ${msg}\n`));
-        console.log(chalk.dim('  뉴스 없이 일반 토론으로 진행합니다.\n'));
+        const scopeLabel = cliEvidence.kind === 'web' ? '웹 근거' : '뉴스';
+        console.log(chalk.red(`  ${scopeLabel} 수집 실패: ${msg}\n`));
+        console.log(chalk.dim('  근거 없이 일반 토론으로 진행합니다.\n'));
       }
     }
   }
@@ -147,4 +159,41 @@ export async function startRepl(cliArgs?: CliArgs): Promise<void> {
       resetTTYInputState();
     }
   }
+}
+
+interface CliEvidenceRequest {
+  kind: EvidenceKind;
+  quiet: boolean;
+  snapshotFile?: string;
+  mode?: 'unified' | 'split';
+  queryTransformMode: 'off' | 'expand';
+  queryLanguageScope: SearchLanguageScope;
+}
+
+function resolveCliEvidenceRequest(cliArgs?: CliArgs): CliEvidenceRequest | null {
+  if (!cliArgs) return null;
+
+  if (cliArgs.web || cliArgs.webSnapshot) {
+    return {
+      kind: 'web',
+      quiet: Boolean(cliArgs.webQuiet),
+      snapshotFile: cliArgs.webSnapshot,
+      mode: cliArgs.webMode,
+      queryTransformMode: cliArgs.webQueryTransformMode === 'expand' ? 'expand' : 'off',
+      queryLanguageScope: cliArgs.webQueryLanguageScope ?? 'input',
+    };
+  }
+
+  if (cliArgs.news || cliArgs.newsSnapshot) {
+    return {
+      kind: 'news',
+      quiet: Boolean(cliArgs.newsQuiet),
+      snapshotFile: cliArgs.newsSnapshot,
+      mode: cliArgs.newsMode,
+      queryTransformMode: cliArgs.newsQueryTransformMode === 'expand' ? 'expand' : 'off',
+      queryLanguageScope: cliArgs.newsQueryLanguageScope ?? 'input',
+    };
+  }
+
+  return null;
 }

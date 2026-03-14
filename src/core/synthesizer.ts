@@ -23,7 +23,7 @@ export class Synthesizer {
   ): Promise<string> {
     const log = messages.map((m) => ({ label: m.label, round: m.round, content: m.content }));
     const prompt = snapshot
-      ? buildSynthesisPromptWithEvidence(question, log, snapshot, roundStates)
+      ? buildSynthesisPromptWithEvidence(question, log, snapshot, roundStates, this.buildPrompt)
       : this.buildPrompt(question, log, roundStates);
 
     const apiMessages: Message[] = [{ role: 'user', content: prompt }];
@@ -40,7 +40,7 @@ export class Synthesizer {
   ): AsyncIterable<string> {
     const log = messages.map((m) => ({ label: m.label, round: m.round, content: m.content }));
     const prompt = snapshot
-      ? buildSynthesisPromptWithEvidence(question, log, snapshot, roundStates)
+      ? buildSynthesisPromptWithEvidence(question, log, snapshot, roundStates, this.buildPrompt)
       : this.buildPrompt(question, log, roundStates);
 
     const apiMessages: Message[] = [{ role: 'user', content: prompt }];

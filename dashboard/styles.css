@@ -1028,6 +1028,12 @@ textarea:focus {
   color: #b45309;
 }
 
+.workflow-chip.workflow-web {
+  background: rgba(14, 116, 144, 0.12);
+  border-color: rgba(14, 116, 144, 0.2);
+  color: #155e75;
+}
+
 .workflow-chip.workflow-general {
   background: rgba(31, 41, 55, 0.06);
   border-color: rgba(31, 41, 55, 0.12);

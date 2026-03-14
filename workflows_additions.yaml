@@ -1,0 +1,120 @@
+workflows:
+  news:
+    templates:
+      - id: news-geopolitics-supply-chain
+        label: 지정학 · 공급망 · 제재
+        description: 국경 간 정책 변화가 조달, 생산, 유통에 미치는 충격을 함께 보는 3자 토론 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: geopolitical-analyst
+            label: 지정학·무역 전략
+            focus: 동맹, 통상 압력, 보복 가능성, 대외정책 변화가 산업에 미치는 파급을 해석합니다.
+            defaultProvider: codex
+            instructions:
+              - 정책 발표국과 상대국 반응을 분리해서 본다.
+              - 3개월과 1년 파급 경로를 구분한다.
+            requiredQuestions:
+              - 어떤 국가·블록이 2차 반응을 보일 가능성이 큰가?
+              - 지정학 리스크가 가격이 아니라 물량에 먼저 반영되는 지점은 어디인가?
+          - roleId: supply-chain-operator
+            label: 공급망·현장 운영
+            focus: 조달, 생산, 물류, 재고 측면에서 실제 병목과 대체 가능성을 검토합니다.
+            defaultProvider: claude
+            instructions:
+              - 대체 공급선과 전환 비용을 함께 본다.
+              - 재고, 리드타임, 인증 이슈를 분리해서 본다.
+          - roleId: sanctions-export-control-counsel
+            label: 제재·수출통제 법률
+            focus: 제재, 수출통제, 라이선스 요건, 역외 집행 가능성을 짚습니다.
+            defaultProvider: gemini
+            instructions:
+              - 제재와 수출통제를 구분한다.
+              - 직접 금지와 우회거래 리스크를 분리한다.
+      - id: news-competition-antitrust
+        label: 경쟁정책 · 플랫폼 · 집행
+        description: 시장 집중, 플랫폼 규율, 실제 집행 강도를 함께 보는 3자 토론 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: competition-economist
+            label: 경쟁경제 전문가
+            focus: 시장 정의, 집중도, 진입장벽, 가격·품질·혁신 효과를 해석합니다.
+            defaultProvider: codex
+            instructions:
+              - 시장 정의 가정과 결론을 분리한다.
+              - 단기 가격효과와 장기 혁신효과를 구분한다.
+            requiredQuestions:
+              - 경쟁 제한의 핵심 메커니즘은 무엇인가?
+              - 가장 먼저 봐야 할 구조 지표는 무엇인가?
+          - roleId: regulatory-affairs
+            label: 규제대응 관점
+            focus: 감독기관 우선순위, 업계 로비, 시행령·가이드라인 단계의 현실을 검토합니다.
+            defaultProvider: claude
+            instructions:
+              - 법 통과와 집행 강도를 분리해서 본다.
+              - 사업자별 대응 옵션을 비교한다.
+          - roleId: antitrust-counsel
+            label: 경쟁법 변호사
+            focus: 기업결합, 자사우대, 데이터 결합, 차별취급 이슈의 위법성 가능성을 짚습니다.
+            defaultProvider: gemini
+            instructions:
+              - 위법성 판단 기준과 입증 부담을 구분한다.
+              - 구조적 조치와 행태적 조치를 분리한다.
+  project:
+    templates:
+      - id: project-security-privacy-reliability
+        label: 보안 · 프라이버시 · SRE
+        description: 보안 내재화, 개인정보 리스크, 운영 신뢰성을 함께 점검하는 3자 토론 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: security-engineer
+            label: 보안 엔지니어
+            focus: 인증·권한, 시크릿 관리, 공급망 보안, 배포 경로의 취약점을 검토합니다.
+            defaultProvider: codex
+            instructions:
+              - 위협 모델과 실제 변경 포인트를 함께 제시한다.
+              - 개발 편의와 통제 강도를 분리해서 평가한다.
+            requiredQuestions:
+              - 가장 큰 공격면은 어디인가?
+              - 출시 전에 반드시 막아야 할 취약점은 무엇인가?
+          - roleId: privacy-engineer
+            label: 프라이버시 엔지니어
+            focus: 데이터 최소화, 동의, 보존, 삭제, 민감정보 처리 흐름을 기준으로 판단합니다.
+            defaultProvider: claude
+            instructions:
+              - 수집·이용·보관·삭제를 흐름 단위로 본다.
+              - 법적 의무와 제품 선택사항을 구분한다.
+          - roleId: sre
+            label: SRE
+            focus: 배포 안정성, 장애 복구, 관측성, 운영 부담을 기준으로 릴리스 위험을 평가합니다.
+            defaultProvider: gemini
+            instructions:
+              - SLI/SLO와 알림 기준이 없으면 운영 준비 미완료로 본다.
+              - 롤백 조건과 점진 배포 전략을 함께 제시한다.
+      - id: project-ux-accessibility-qa
+        label: UX · 접근성 · QA
+        description: 사용성, 접근성 적합성, 회귀 검증 범위를 함께 점검하는 3자 토론 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: ux
+            label: UX 전문가
+            focus: 사용자 여정, 정보 구조, 인지 부하를 기준으로 개선안을 제시합니다.
+            defaultProvider: codex
+            instructions:
+              - 사용자 과업 흐름이 어디서 끊기는지 먼저 설명한다.
+              - 화면 추가보다 구조 단순화를 우선 검토한다.
+          - roleId: accessibility
+            label: 접근성 전문가
+            focus: 키보드 탐색, 명도 대비, 스크린리더, 오류 피드백 등 접근성 리스크를 검토합니다.
+            defaultProvider: claude
+            instructions:
+              - 시각·청각·운동·인지 접근성 이슈를 구분한다.
+              - 출시 전 필수 수정과 사후 개선을 나눠 제시한다.
+            requiredQuestions:
+              - 보조기술 사용자가 가장 먼저 막히는 지점은 어디인가?
+              - 자동 테스트와 수동 테스트를 어떻게 나눌 것인가?
+          - roleId: qa
+            label: QA
+            focus: 회귀 위험, 검증 범위, 운영 관측성을 기준으로 판단합니다.
+            defaultProvider: gemini
+            instructions:
+              - 실패 시나리오와 필요한 테스트를 함께 제안한다.

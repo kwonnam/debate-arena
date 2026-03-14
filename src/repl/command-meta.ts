@@ -91,7 +91,13 @@ export const COMMAND_REGISTRY: readonly CommandMeta[] = [
   // Management
   {
     command: 'news',
-    description: 'Collect news articles as debate evidence: /news <query>',
+    description: 'Collect news evidence: /news [--expand] [--lang input|ko|en|both] <query>',
+    category: 'management',
+    args: { kind: 'required', placeholder: '<query>' },
+  },
+  {
+    command: 'web',
+    description: 'Collect general web evidence: /web [--expand] [--lang input|ko|en|both] <query>',
     category: 'management',
     args: { kind: 'required', placeholder: '<query>' },
   },

@@ -60,4 +60,18 @@ describe('NewsApiProvider', () => {
     const result = await provider.search('query');
     expect(result).toEqual([]);
   });
+
+  it('지원되지 않는 언어 코드는 language 파라미터를 생략한다', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ articles: [] }),
+    });
+
+    const provider = new NewsApiProvider('test-key');
+    await provider.search('한국 AI 규제', { language: 'ko' });
+
+    const requestUrl = String(mockFetch.mock.calls[0]?.[0] || '');
+    expect(requestUrl).toContain('q=%ED%95%9C%EA%B5%AD+AI+%EA%B7%9C%EC%A0%9C');
+    expect(requestUrl).not.toContain('language=ko');
+  });
 });
