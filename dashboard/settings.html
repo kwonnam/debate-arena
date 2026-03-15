@@ -99,6 +99,48 @@
 
         <section class="workbench-card">
           <div class="section-heading">
+            <span class="step-badge muted">Vault</span>
+            <div>
+              <h2>Obsidian 연결</h2>
+              <p>선택 세션을 다운로드 대신 Vault 폴더에 바로 저장합니다. Obsidian이 열려 있으면 노트가 즉시 반영됩니다.</p>
+            </div>
+          </div>
+          <div class="settings-path-card">
+            <span class="mini-badge">OBSIDIAN</span>
+            <strong id="obsidian-config-path">Obsidian 설정 파일 경로를 불러오는 중입니다.</strong>
+            <p id="obsidian-config-meta">Vault 경로와 워크플로우별 기본 저장 폴더를 설정합니다.</p>
+          </div>
+          <div class="settings-form-stack">
+            <label class="field">
+              <span>Vault 경로</span>
+              <input id="obsidian-vault-path" placeholder="/absolute/path/to/your-obsidian-vault" />
+            </label>
+            <label class="field">
+              <span>일반 세션 폴더</span>
+              <input id="obsidian-folder-general" placeholder="Debate Arena/Inbox" />
+            </label>
+            <label class="field">
+              <span>프로젝트·기획 폴더</span>
+              <input id="obsidian-folder-project" placeholder="Debate Arena/Projects" />
+            </label>
+            <label class="field">
+              <span>근거 기반 토론 폴더</span>
+              <input id="obsidian-folder-news" placeholder="Debate Arena/News" />
+            </label>
+            <label class="toggle-field">
+              <input id="obsidian-open-after-save" type="checkbox" />
+              <span>저장 뒤 Obsidian 노트 열기 시도</span>
+            </label>
+          </div>
+          <div class="settings-action-stack">
+            <button class="button" type="button" id="obsidian-config-save">Obsidian 설정 저장</button>
+            <button class="button subtle" type="button" id="obsidian-config-reload">Obsidian 설정 다시 불러오기</button>
+          </div>
+          <p class="form-status" id="obsidian-config-status">Vault 경로를 저장하면 `Obsidian 노트` 버튼이 Vault에 바로 기록합니다.</p>
+        </section>
+
+        <section class="workbench-card">
+          <div class="section-heading">
             <span class="step-badge muted">Guide</span>
             <div>
               <h2>권장 규칙</h2>

@@ -1,9 +1,20 @@
+import {
+  applySessionStatusPatch,
+  deriveSessionStatusPatchFromEnvelope,
+  isTerminalSessionStatus,
+} from './session-status.js';
+
 const sessionList = document.getElementById('session-list');
 const streamBox = document.getElementById('stream');
 const timelineBox = document.getElementById('timeline');
 const synthesisBox = document.getElementById('synthesis');
 const synthesisSection = document.getElementById('synthesis-section');
+const followUpSection = document.getElementById('follow-up-section');
+const followUpPanel = document.getElementById('follow-up-panel');
+const followUpEmpty = document.getElementById('follow-up-empty');
 const followUpComposer = document.getElementById('follow-up-composer');
+const followUpConfigPreview = document.getElementById('follow-up-config-preview');
+const followUpQuickStart = document.getElementById('follow-up-quickstart');
 const followUpTopicInput = document.getElementById('follow-up-topic');
 const followUpSuggestions = document.getElementById('follow-up-suggestions');
 const followUpStatus = document.getElementById('follow-up-status');
@@ -37,6 +48,7 @@ const projectAdvancedFields = document.getElementById('project-advanced-fields')
 const projectParticipantMode = document.getElementById('project-participant-mode');
 const projectTemplatePanel = document.getElementById('project-template-panel');
 const projectCustomPanel = document.getElementById('project-custom-panel');
+const projectParticipantBuilder = document.getElementById('project-participant-builder');
 const projectCustomCount = document.getElementById('project-custom-count');
 const projectTemplateSelect = document.getElementById('project-template-select');
 const projectTemplateSummary = document.getElementById('project-template-description');
@@ -44,6 +56,9 @@ const projectRoleSlots = document.getElementById('project-participant-config');
 const projectCustomRoleSlots = document.getElementById('project-custom-participant-config');
 const projectCustomSummary = document.getElementById('project-custom-summary');
 const projectJudgeSelect = projectForm?.querySelector('select[name="judge"]');
+const projectNoContextToggle = projectForm?.querySelector('input[name="noContext"]');
+const projectOllamaModelGroup = document.getElementById('project-ollama-model-group');
+const projectOllamaModelSelect = document.getElementById('project-ollama-model');
 const projectIdeaIntentInput = document.getElementById('project-idea-intent');
 const projectIdeaAudienceInput = document.getElementById('project-idea-audience');
 const projectIdeaSeedInput = document.getElementById('project-idea-seed');
@@ -72,6 +87,7 @@ const debateSnapshotInput = document.getElementById('debate-snapshot-id');
 const newsParticipantMode = document.getElementById('news-participant-mode');
 const newsTemplatePanel = document.getElementById('news-template-panel');
 const newsCustomPanel = document.getElementById('news-custom-panel');
+const newsParticipantBuilder = document.getElementById('news-participant-builder');
 const newsCustomCount = document.getElementById('news-custom-count');
 const newsTemplateSelect = document.getElementById('news-template-select');
 const newsTemplateSummary = document.getElementById('news-template-description');
@@ -93,6 +109,16 @@ const roleConfigResetButton = document.getElementById('role-config-reset');
 const roleConfigValidation = document.getElementById('role-config-validation');
 const roleConfigMeta = document.getElementById('role-config-meta');
 const roleConfigRevision = document.getElementById('role-config-revision');
+const obsidianConfigPath = document.getElementById('obsidian-config-path');
+const obsidianConfigMeta = document.getElementById('obsidian-config-meta');
+const obsidianConfigStatus = document.getElementById('obsidian-config-status');
+const obsidianVaultPathInput = document.getElementById('obsidian-vault-path');
+const obsidianFolderGeneralInput = document.getElementById('obsidian-folder-general');
+const obsidianFolderProjectInput = document.getElementById('obsidian-folder-project');
+const obsidianFolderNewsInput = document.getElementById('obsidian-folder-news');
+const obsidianOpenAfterSaveInput = document.getElementById('obsidian-open-after-save');
+const obsidianConfigSaveButton = document.getElementById('obsidian-config-save');
+const obsidianConfigReloadButton = document.getElementById('obsidian-config-reload');
 
 const snapshotList = document.getElementById('snapshot-list');
 const selectedEvidence = document.getElementById('selected-evidence');
@@ -124,6 +150,7 @@ let cachedSnapshots = [];
 let cachedOllamaModels = [];
 let cachedProviderOptions = [];
 let cachedJudgeOptions = [];
+let cachedObsidianConfig = null;
 let roleTemplateConfig = null;
 let roleTemplateDefaults = { project: '', news: '' };
 let roleConfigDefaultRaw = '';
@@ -255,6 +282,15 @@ function getWorkflowControls(workflow) {
   if (workflow === 'news') {
     return {
       form: newsForm,
+      modeSelect: newsForm?.querySelector('select[name="mode"]'),
+      roundsInput: newsForm?.querySelector('input[name="rounds"]'),
+      executionCwdInput: newsExecutionCwdInput,
+      noContextToggle: newsForm?.querySelector('input[name="noContext"]'),
+      ollamaModelSelect: newsOllamaModelSelect,
+      snapshotInput: debateSnapshotInput,
+      advancedToggle: newsAdvancedToggle,
+      advancedFields: newsAdvancedFields,
+      participantBuilder: newsParticipantBuilder,
       participantMode: newsParticipantMode,
       templatePanel: newsTemplatePanel,
       customPanel: newsCustomPanel,
@@ -270,6 +306,15 @@ function getWorkflowControls(workflow) {
 
   return {
     form: projectForm,
+    modeSelect: projectForm?.querySelector('select[name="mode"]'),
+    roundsInput: projectForm?.querySelector('input[name="rounds"]'),
+    executionCwdInput: projectExecutionCwdInput,
+    noContextToggle: projectNoContextToggle,
+    ollamaModelSelect: projectOllamaModelSelect,
+    snapshotInput: null,
+    advancedToggle: projectAdvancedToggle,
+    advancedFields: projectAdvancedFields,
+    participantBuilder: projectParticipantBuilder,
     participantMode: projectParticipantMode,
     templatePanel: projectTemplatePanel,
     customPanel: projectCustomPanel,
@@ -632,6 +677,26 @@ function renderProjectIdeaPreview() {
   `;
 }
 
+function canProjectUseOllama() {
+  return Boolean(projectNoContextToggle?.checked);
+}
+
+function isOllamaProviderValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized || normalized === 'both') {
+    return false;
+  }
+
+  const option = [...cachedProviderOptions, ...cachedJudgeOptions]
+    .find((entry) => String(entry.value || '').trim().toLowerCase() === normalized);
+
+  if (option?.type === 'ollama-compat') {
+    return true;
+  }
+
+  return normalized.startsWith('ollama');
+}
+
 function getWorkflowMeta(workflowKind, evidenceKind) {
   const normalizedEvidenceKind = evidenceKind === 'web'
     ? 'web'
@@ -759,21 +824,329 @@ function normalizeFollowUpTopics(rawValue) {
 
 function buildFollowUpQuestion(topicText) {
   const topics = normalizeFollowUpTopics(topicText);
-  const modeMeta = getModeMeta(activeSessionSummary?.mode);
-  const sessionWord = modeMeta.sessionWord || '토론';
+  const followUpConfig = resolveFollowUpConfiguration();
+  const sourceModeMeta = getModeMeta(activeSessionSummary?.mode);
+  const targetModeMeta = getModeMeta(followUpConfig.ok ? followUpConfig.config.mode : activeSessionSummary?.mode);
+  const sourceSessionWord = sourceModeMeta.sessionWord || '토론';
+  const targetSessionWord = targetModeMeta.sessionWord || '토의';
+  const isProjectFollowUp = (followUpConfig.ok ? followUpConfig.config.workflowKind : activeSessionSummary?.workflowKind) === 'project';
+  const intro = isProjectFollowUp
+    ? `이전 ${sourceSessionWord}에서 정리된 기획 문서와 결론을 바탕으로`
+    : `이전 ${sourceSessionWord}의 결론을 바탕으로`;
+  const closing = isProjectFollowUp
+    ? '기존 기획과 연결되는 점, 달라지는 가정, 사용자 흐름, 정보 구조, 화면/API/도메인 설계, 구현 리스크와 검증 순서를 함께 정리해줘.'
+    : '기존 결론과 연결되는 점, 달라지는 가정, 추가로 검증할 리스크와 다음 액션을 함께 정리해줘.';
 
   if (topics.length <= 1) {
     const singleTopic = topics[0] || String(topicText || '').trim();
-    return `이전 ${sessionWord}의 결론을 바탕으로 "${singleTopic}"를 새 주제로 삼아 후속 ${sessionWord}를 진행해줘. 기존 결론과 연결되는 점, 달라지는 가정, 추가로 검증할 리스크와 다음 액션을 함께 정리해줘.`;
+    return `${intro} "${singleTopic}"를 새 주제로 삼아 후속 ${targetSessionWord}를 진행해줘. ${closing}`;
   }
 
   return [
-    `이전 ${sessionWord}의 결론을 바탕으로 다음 주제들을 묶어 후속 ${sessionWord}를 진행해줘.`,
+    `${intro} 다음 주제들을 묶어 후속 ${targetSessionWord}를 진행해줘.`,
     '',
     ...topics.map((topic) => `- ${topic}`),
     '',
-    '기존 결론과 연결되는 점, 달라지는 가정, 추가로 검증할 리스크와 다음 액션을 함께 정리해줘.',
+    closing,
   ].join('\n');
+}
+
+function getFollowUpWorkflow() {
+  return pageWorkflow === 'news' ? 'news' : 'project';
+}
+
+function getFollowUpForm() {
+  return getFollowUpWorkflow() === 'news' ? newsForm : projectForm;
+}
+
+function resolveFollowUpConfiguration() {
+  const workflow = getFollowUpWorkflow();
+  const controls = getWorkflowControls(workflow);
+  const form = controls.form;
+
+  if (!form) {
+    return { ok: false, error: '후속 토의 설정을 불러오지 못했습니다.' };
+  }
+
+  const participantResult = resolveWorkflowParticipants(workflow);
+  if (!participantResult.ok) {
+    return participantResult;
+  }
+
+  const executionCwd = String(controls.executionCwdInput?.value || '').trim();
+  const ollamaModel = String(controls.ollamaModelSelect?.value || '').trim();
+  const config = {
+    workflowKind: workflow,
+    mode: String(controls.modeSelect?.value || activeSessionSummary?.mode || 'discussion'),
+    rounds: toInt(controls.roundsInput?.value, activeSessionSummary?.rounds || 3),
+    judge: String(controls.judgeSelect?.value || activeSessionSummary?.judge || 'claude'),
+    participants: participantResult.participants,
+    noContext: Boolean(controls.noContextToggle?.checked),
+    executionCwd: executionCwd || undefined,
+    snapshotId: workflow === 'news' ? (controls.snapshotInput?.value?.trim() || selectedSnapshotId || undefined) : undefined,
+    ollamaModel: ollamaModel || undefined,
+  };
+
+  return { ok: true, config };
+}
+
+function renderFollowUpConfigurationPreview() {
+  if (!followUpConfigPreview) return;
+
+  if (!canContinueSession(activeSessionSummary)) {
+    followUpConfigPreview.innerHTML = '';
+    return;
+  }
+
+  const configResult = resolveFollowUpConfiguration();
+  if (!configResult.ok) {
+    followUpConfigPreview.innerHTML = `
+      <strong>후속 토의 설정 확인</strong>
+      <div class="participant-summary-grid">
+        <div class="participant-summary-row">
+          <span>현재 상단 설정</span>
+          <p>${escapeHtml(configResult.error)}</p>
+        </div>
+        <div class="participant-summary-row">
+          <span>적용 방식</span>
+          <p>상단의 진행 방식, 참가자, Judge 설정이 이 후속 토의에 그대로 적용됩니다.</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const { config } = configResult;
+  const modeMeta = getModeMeta(config.mode);
+  const participantLabel = formatParticipantsInline(config.participants) || '선택된 참가자가 없습니다.';
+  const contextSummary = config.workflowKind === 'news'
+    ? (config.snapshotId
+      ? `근거 팩 ${config.snapshotId}`
+      : activeSessionSummary?.evidence?.id
+        ? `이전 근거 팩 ${activeSessionSummary.evidence.id} 재사용`
+        : '이전 근거를 재사용합니다.')
+    : (config.noContext
+      ? '프로젝트 자동 컨텍스트를 끄고 진행합니다.'
+      : config.executionCwd
+        ? `${shortPath(config.executionCwd)} 경로를 함께 읽습니다.`
+        : activeSessionSummary?.executionCwd
+          ? `${shortPath(activeSessionSummary.executionCwd)} 경로를 이어서 사용합니다.`
+          : '이전 실행 경로를 이어서 사용합니다.');
+  const workflowHint = config.workflowKind === 'project'
+    ? '이전 결론은 기획 문서/브리프로 함께 주입되고, 아래 참가자 구성이 새 설계 토의를 이어받습니다.'
+    : '이전 결론과 근거 문맥을 바탕으로, 아래 참가자 구성이 후속 토의를 새 시각으로 이어갑니다.';
+
+  followUpConfigPreview.innerHTML = `
+    <strong>후속 토의 실행 설정</strong>
+    <div class="participant-summary-grid">
+      <div class="participant-summary-row">
+        <span>진행 방식</span>
+        <p>${escapeHtml(modeMeta.label)} · Judge ${escapeHtml(config.judge)} · ${escapeHtml(config.rounds)} rounds</p>
+      </div>
+      <div class="participant-summary-row">
+        <span>새 참가자 구성</span>
+        <p>${escapeHtml(participantLabel)}</p>
+      </div>
+      <div class="participant-summary-row">
+        <span>배경 문맥</span>
+        <p>${escapeHtml(contextSummary)}</p>
+      </div>
+      <div class="participant-summary-row">
+        <span>안내</span>
+        <p>${escapeHtml(workflowHint)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function getFollowUpQuickStartPresets(workflow) {
+  const templates = getWorkflowTemplates(workflow);
+  if (templates.length === 0) {
+    return [];
+  }
+
+  const templateMap = new Map(templates.map((template) => [template.id, template]));
+  const currentMode = String(getWorkflowControls(workflow).modeSelect?.value || 'discussion');
+
+  if (workflow === 'project') {
+    const preferred = [
+      {
+        templateId: 'project-ux-backend-qa',
+        title: '프로그램 설계',
+        description: '화면 흐름, API, 검증 계획까지 함께 다듬습니다.',
+        mode: 'plan',
+      },
+      {
+        templateId: 'project-ux-architecture',
+        title: '구조 점검',
+        description: '사용자 흐름과 시스템 경계를 빠르게 정리합니다.',
+        mode: 'plan',
+      },
+      {
+        templateId: 'project-product-discovery',
+        title: '기획 재정리',
+        description: '사용자 문제, MVP 범위, 검증 가설을 다시 세웁니다.',
+        mode: 'discussion',
+      },
+    ].filter((item) => templateMap.has(item.templateId))
+      .map((item) => ({
+        ...item,
+        template: templateMap.get(item.templateId),
+      }));
+
+    const includedIds = new Set(preferred.map((item) => item.templateId));
+    const remainder = templates
+      .filter((template) => !includedIds.has(template.id))
+      .map((template) => ({
+        templateId: template.id,
+        title: template.label,
+        description: template.description,
+        mode: currentMode,
+        template,
+      }));
+
+    return [...preferred, ...remainder];
+  }
+
+  return templates.map((template) => ({
+    templateId: template.id,
+    title: template.label,
+    description: template.description,
+    mode: currentMode,
+    template,
+  }));
+}
+
+async function applyFollowUpTemplatePreset(workflow, templateId, mode) {
+  const controls = getWorkflowControls(workflow);
+  const template = getWorkflowTemplates(workflow).find((item) => item.id === templateId);
+  if (!template) {
+    return;
+  }
+
+  if (controls.templateSelect) {
+    controls.templateSelect.value = template.id;
+  }
+  if (controls.modeSelect && mode) {
+    controls.modeSelect.value = mode;
+  }
+  if (getWorkflowMode(workflow) !== 'template') {
+    setWorkflowMode(workflow, 'template');
+  }
+  if (template.recommendedJudge && controls.judgeSelect) {
+    const judgeOptions = getWorkflowJudgeOptions(workflow);
+    if (judgeOptions.some((option) => option.value === template.recommendedJudge && !option.disabled)) {
+      controls.judgeSelect.value = template.recommendedJudge;
+    }
+  }
+
+  renderWorkflowTemplateEditor(workflow);
+  await syncWorkflowOllamaModelField(workflow);
+  renderFollowUpComposer();
+  updateFollowUpStatus(`${template.label} 구성을 적용했습니다. 새 주제를 입력해 후속 토의를 시작하세요.`);
+  followUpTopicInput?.focus();
+}
+
+async function openFollowUpParticipantEditor(workflow) {
+  const controls = getWorkflowControls(workflow);
+  setAdvancedPanelOpen(controls.advancedToggle, controls.advancedFields, true);
+
+  if (getWorkflowMode(workflow) !== 'custom') {
+    if ((getWorkflowComposerState(workflow).customParticipants || []).length === 0) {
+      seedCustomParticipantsFromTemplate(workflow);
+    }
+    setWorkflowMode(workflow, 'custom');
+  }
+
+  renderWorkflowTemplateEditor(workflow);
+  await syncWorkflowOllamaModelField(workflow);
+  renderFollowUpComposer();
+  updateFollowUpStatus('Custom 참가자 편집으로 전환했습니다. 역할과 모델을 조정한 뒤 새 주제를 입력하세요.');
+
+  const target = controls.participantBuilder || controls.customRoleSlots || controls.roleSlots;
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.setTimeout(() => {
+    const focusTarget = controls.customRoleSlots?.querySelector('select, input');
+    if (focusTarget && 'focus' in focusTarget) {
+      focusTarget.focus();
+    }
+  }, 140);
+}
+
+function renderFollowUpQuickStart() {
+  if (!followUpQuickStart) return;
+
+  if (!canContinueSession(activeSessionSummary)) {
+    followUpQuickStart.innerHTML = '';
+    followUpQuickStart.style.display = 'none';
+    return;
+  }
+
+  const workflow = getFollowUpWorkflow();
+  const controls = getWorkflowControls(workflow);
+  const presets = getFollowUpQuickStartPresets(workflow);
+  if (presets.length === 0) {
+    followUpQuickStart.innerHTML = '';
+    followUpQuickStart.style.display = 'none';
+    return;
+  }
+
+  const currentTemplateId = controls.templateSelect?.value || getDefaultTemplateId(workflow);
+  const currentMode = String(controls.modeSelect?.value || 'discussion');
+  const participantMode = getWorkflowMode(workflow);
+  const helperText = workflow === 'project'
+    ? '후속 토의 카드 안에서 설계용 참가자 조합과 진행 방식을 바로 바꿀 수 있습니다.'
+    : '후속 토의 카드 안에서 참가자 조합을 바로 바꿀 수 있습니다.';
+
+  followUpQuickStart.style.display = 'flex';
+  followUpQuickStart.innerHTML = `
+    <div class="follow-up-quickstart-head">
+      <strong>${workflow === 'project' ? '설계용 빠른 설정' : '참가자 빠른 설정'}</strong>
+      <p>${escapeHtml(helperText)}</p>
+    </div>
+    <div class="follow-up-template-grid">
+      ${presets.map((preset) => {
+        const template = preset.template;
+        const participantLabels = (template?.participants || [])
+          .map((role) => `<span class="meta-badge">${escapeHtml(role.label)}</span>`)
+          .join('');
+        const isActive = participantMode === 'template'
+          && currentTemplateId === preset.templateId
+          && currentMode === preset.mode;
+        const judgeValue = template?.recommendedJudge || String(controls.judgeSelect?.value || 'claude');
+        return `
+          <button
+            class="follow-up-template-card ${isActive ? 'is-active' : ''}"
+            type="button"
+            data-follow-up-template="${escapeHtml(preset.templateId)}"
+            data-follow-up-mode="${escapeHtml(preset.mode)}"
+            aria-pressed="${String(isActive)}"
+          >
+            <span class="follow-up-template-kicker">${escapeHtml(preset.title)}</span>
+            <strong>${escapeHtml(template?.label || preset.title)}</strong>
+            <p>${escapeHtml(preset.description || template?.description || '')}</p>
+            <div class="summary-chip-row">${participantLabels}</div>
+            <span class="follow-up-template-meta">${escapeHtml(getModeMeta(preset.mode).label)} · Judge ${escapeHtml(judgeValue)}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+    <div class="execute-actions follow-up-shortcut-actions">
+      <button class="button subtle" type="button" id="follow-up-customize-participants">참가자 직접 편집</button>
+    </div>
+  `;
+
+  followUpQuickStart.querySelectorAll('[data-follow-up-template]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const templateId = button.getAttribute('data-follow-up-template') || '';
+      const mode = button.getAttribute('data-follow-up-mode') || '';
+      await applyFollowUpTemplatePreset(workflow, templateId, mode);
+    });
+  });
+
+  followUpQuickStart.querySelector('#follow-up-customize-participants')?.addEventListener('click', async () => {
+    await openFollowUpParticipantEditor(workflow);
+  });
 }
 
 function getFollowUpStatusMessage() {
@@ -785,6 +1158,11 @@ function getFollowUpStatusMessage() {
     return '이전 결론을 바탕으로 새 토의를 시작하는 중입니다...';
   }
 
+  const configResult = resolveFollowUpConfiguration();
+  if (!configResult.ok) {
+    return configResult.error;
+  }
+
   const topics = normalizeFollowUpTopics(followUpTopicInput?.value);
   if (topics.length > 0) {
     return `새 주제 ${topics.length}개가 준비되었습니다. 이전 결론과 함께 후속 토의로 전달됩니다.`;
@@ -792,6 +1170,10 @@ function getFollowUpStatusMessage() {
 
   if (getFollowUpTopicSuggestions().length > 0) {
     return '추천 주제를 눌러 추가하거나, 직접 새 주제를 한 줄씩 입력해 후속 토의를 시작하세요.';
+  }
+
+  if (!latestRoundState) {
+    return '새 주제는 지금 바로 입력할 수 있고, 마지막 라운드를 불러오면 추천 주제도 함께 표시됩니다.';
   }
 
   return '결론에서 파생된 새 주제를 한 줄씩 입력하면 이전 합의와 쟁점을 이어받아 후속 토의를 시작합니다.';
@@ -821,15 +1203,27 @@ function addFollowUpTopic(topic) {
 }
 
 function renderFollowUpComposer() {
-  if (!followUpComposer || !followUpTopicInput) return;
+  if (!followUpComposer || !followUpTopicInput || !followUpEmpty) return;
 
-  const readyForFollowUp = canContinueSession(activeSessionSummary)
-    && Boolean(synthesisContent)
-    && synthesisContent !== SYNTHESIS_PLACEHOLDER;
+  const readyForFollowUp = canContinueSession(activeSessionSummary);
+  const configResult = readyForFollowUp ? resolveFollowUpConfiguration() : null;
 
   followUpComposer.style.display = readyForFollowUp ? 'flex' : 'none';
+  followUpEmpty.style.display = readyForFollowUp ? 'none' : 'block';
 
   if (!readyForFollowUp) {
+    if (!activeSessionSummary) {
+      followUpEmpty.innerHTML = `
+        <strong>완료된 세션을 선택하세요.</strong>
+        <p>결론이 있는 세션을 고르면 여기서 바로 새 주제를 추가할 수 있습니다.</p>
+      `;
+    } else {
+      followUpEmpty.innerHTML = `
+        <strong>아직 후속 토의를 시작할 수 없습니다.</strong>
+        <p>현재 세션 상태가 <code>${escapeHtml(activeSessionSummary.status || 'UNKNOWN')}</code>입니다. 완료된 세션을 선택하면 이 카드에서 바로 새 주제를 추가할 수 있습니다.</p>
+      `;
+    }
+
     followUpTopicInput.value = '';
     followUpTopicInput.disabled = true;
     if (followUpStartButton) {
@@ -839,16 +1233,26 @@ function renderFollowUpComposer() {
       followUpSuggestions.innerHTML = '';
       followUpSuggestions.style.display = 'none';
     }
+    if (followUpConfigPreview) {
+      followUpConfigPreview.innerHTML = '';
+    }
+    if (followUpQuickStart) {
+      followUpQuickStart.innerHTML = '';
+      followUpQuickStart.style.display = 'none';
+    }
     updateFollowUpStatus();
     return;
   }
 
-  const modeMeta = getModeMeta(activeSessionSummary?.mode);
+  const modeMeta = getModeMeta(configResult?.ok ? configResult.config.mode : activeSessionSummary?.mode);
+  const canStartFollowUp = !followUpRequestInFlight && Boolean(configResult?.ok);
   followUpTopicInput.disabled = followUpRequestInFlight;
   followUpTopicInput.placeholder = getFollowUpTopicPlaceholder();
+  renderFollowUpConfigurationPreview();
+  renderFollowUpQuickStart();
 
   if (followUpStartButton) {
-    followUpStartButton.disabled = followUpRequestInFlight;
+    followUpStartButton.disabled = !canStartFollowUp;
     followUpStartButton.textContent = `새 ${modeMeta.sessionWord} 시작`;
   }
 
@@ -865,6 +1269,13 @@ function renderFollowUpComposer() {
           return `<button class="chip-button follow-up-chip" type="button" data-follow-up-topic="${escapedTopic}">${escapedTopic}</button>`;
         })
         .join('');
+
+      followUpSuggestions.querySelectorAll('[data-follow-up-topic]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const topic = button.getAttribute('data-follow-up-topic') || '';
+          addFollowUpTopic(topic);
+        });
+      });
     }
   }
 
@@ -878,7 +1289,7 @@ function focusFollowUpComposer() {
     return false;
   }
 
-  synthesisSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  (followUpSection || followUpPanel || followUpComposer)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   window.setTimeout(() => {
     followUpTopicInput.focus();
   }, 120);
@@ -1235,16 +1646,16 @@ function renderDecisionBoard() {
 }
 
 function getWorkflowProviderOptions(workflow) {
-  if (workflow === 'project') {
-    return cachedProviderOptions.filter((option) => option.value !== 'ollama');
+  if (workflow === 'project' && !canProjectUseOllama()) {
+    return cachedProviderOptions.filter((option) => !isOllamaProviderValue(option.value));
   }
 
   return cachedProviderOptions;
 }
 
 function getWorkflowJudgeOptions(workflow) {
-  if (workflow === 'project') {
-    return cachedJudgeOptions.filter((option) => option.value !== 'ollama');
+  if (workflow === 'project' && !canProjectUseOllama()) {
+    return cachedJudgeOptions.filter((option) => !isOllamaProviderValue(option.value));
   }
 
   return cachedJudgeOptions;
@@ -1557,9 +1968,8 @@ function renderWorkflowRoleSlots(workflow) {
         ...workflowRoleAssignments[workflow],
         [roleId]: select.value,
       };
-      if (workflow === 'news') {
-        await syncNewsOllamaModelField();
-      }
+      await syncWorkflowOllamaModelField(workflow);
+      renderFollowUpComposer();
     });
   });
 }
@@ -1689,9 +2099,8 @@ function renderWorkflowCustomParticipants(workflow) {
         customParticipants: [...current],
       };
       renderWorkflowCustomParticipants(workflow);
-      if (workflow === 'news') {
-        await syncNewsOllamaModelField();
-      }
+      await syncWorkflowOllamaModelField(workflow);
+      renderFollowUpComposer();
     });
   });
 
@@ -1709,9 +2118,8 @@ function renderWorkflowCustomParticipants(workflow) {
         customParticipants: [...current],
       };
       renderWorkflowCustomSummary(workflow);
-      if (workflow === 'news') {
-        await syncNewsOllamaModelField();
-      }
+      await syncWorkflowOllamaModelField(workflow);
+      renderFollowUpComposer();
     });
   });
 
@@ -1742,6 +2150,7 @@ function renderWorkflowCustomParticipants(workflow) {
           : '역할명을 직접 입력하면 그 관점으로 토론에 참여합니다.';
       }
       renderWorkflowCustomSummary(workflow);
+      renderFollowUpComposer();
     });
   });
 
@@ -1996,6 +2405,97 @@ async function saveRoleConfigEditor() {
     });
   }
   await refreshRoleTemplates();
+}
+
+async function refreshObsidianConfigEditor() {
+  const { ok, data } = await fetchJson('/api/obsidian/config');
+  if (!ok) {
+    if (obsidianConfigStatus) {
+      obsidianConfigStatus.textContent = data.error || 'Obsidian 설정을 불러오지 못했습니다.';
+    }
+    return;
+  }
+
+  cachedObsidianConfig = data.config || null;
+  if (obsidianConfigPath) {
+    obsidianConfigPath.textContent = data.path || '';
+  }
+  if (obsidianConfigMeta) {
+    obsidianConfigMeta.textContent = 'Vault 경로와 워크플로우별 기본 저장 폴더를 설정합니다.';
+  }
+  if (obsidianVaultPathInput) {
+    obsidianVaultPathInput.value = data.config?.vaultPath || '';
+  }
+  if (obsidianFolderGeneralInput) {
+    obsidianFolderGeneralInput.value = data.config?.folders?.general || '';
+  }
+  if (obsidianFolderProjectInput) {
+    obsidianFolderProjectInput.value = data.config?.folders?.project || '';
+  }
+  if (obsidianFolderNewsInput) {
+    obsidianFolderNewsInput.value = data.config?.folders?.news || '';
+  }
+  if (obsidianOpenAfterSaveInput) {
+    obsidianOpenAfterSaveInput.checked = Boolean(data.config?.openAfterSave);
+  }
+  if (obsidianConfigStatus) {
+    obsidianConfigStatus.textContent = data.config?.vaultPath
+      ? `Vault 저장 활성화 · ${data.config.vaultPath}`
+      : 'Vault 경로를 저장하면 `Obsidian 노트` 버튼이 Vault에 바로 기록합니다.';
+  }
+}
+
+async function saveObsidianConfigEditor() {
+  const { ok, data } = await fetchJson('/api/obsidian/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      vaultPath: obsidianVaultPathInput?.value || '',
+      folders: {
+        general: obsidianFolderGeneralInput?.value || '',
+        project: obsidianFolderProjectInput?.value || '',
+        news: obsidianFolderNewsInput?.value || '',
+      },
+      openAfterSave: Boolean(obsidianOpenAfterSaveInput?.checked),
+    }),
+  });
+
+  if (!ok) {
+    if (obsidianConfigStatus) {
+      obsidianConfigStatus.textContent = data.error || 'Obsidian 설정 저장에 실패했습니다.';
+    }
+    return;
+  }
+
+  cachedObsidianConfig = data.config || null;
+  if (obsidianConfigStatus) {
+    obsidianConfigStatus.textContent = data.config?.vaultPath
+      ? `Obsidian 설정 저장 완료 · ${data.config.vaultPath}`
+      : 'Obsidian 설정 저장 완료 · Vault 경로를 입력하면 직접 저장이 활성화됩니다.';
+  }
+  await refreshObsidianConfigEditor();
+}
+
+function openObsidianUrl(url) {
+  if (!url) return;
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+}
+
+async function saveSessionNoteToObsidianVault(filename, content, workflowKind) {
+  return fetchJson('/api/obsidian/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename,
+      content,
+      workflowKind,
+    }),
+  });
 }
 
 function renderSessions(sessions) {
@@ -2372,6 +2872,7 @@ async function useSnapshot(snapshotId) {
   renderSnapshots(cachedSnapshots);
   renderSelectedEvidence();
   renderEvidencePack();
+  renderFollowUpComposer();
 }
 
 function clearSelectedSnapshot() {
@@ -2387,6 +2888,7 @@ function clearSelectedSnapshot() {
   renderSnapshots(cachedSnapshots);
   renderSelectedEvidence();
   renderEvidencePack();
+  renderFollowUpComposer();
 }
 
 async function viewSnapshot(snapshotId) {
@@ -2516,6 +3018,33 @@ function handleEnvelope(envelope) {
       roundProgress.style.display = 'none';
     }
   }
+
+  const statusPatch = deriveSessionStatusPatchFromEnvelope(envelope);
+  if (statusPatch) {
+    cachedSessions = applySessionStatusPatch(cachedSessions, statusPatch);
+    if (activeSessionSummary?.sessionId === statusPatch.sessionId) {
+      activeSessionSummary = {
+        ...activeSessionSummary,
+        status: statusPatch.status,
+        updatedAt: Math.max(Number(activeSessionSummary.updatedAt) || 0, Number(statusPatch.updatedAt) || 0),
+      };
+    }
+    renderSessions(cachedSessions);
+    renderSessionBrief();
+    renderFollowUpComposer();
+    if (isTerminalSessionStatus(statusPatch.status) && activeSessionId === statusPatch.sessionId) {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      clearTimeout(stalledTimer);
+      stalledTimer = null;
+      setConnState('idle');
+      window.setTimeout(() => {
+        void refreshSessions();
+      }, 150);
+    }
+  }
 }
 
 async function replayEvents(fromSequence) {
@@ -2622,6 +3151,7 @@ async function selectSession(sessionId) {
 
   renderSessions(cachedSessions);
   renderSessionBrief();
+  renderFollowUpComposer();
   await syncDisplayedEvidence();
   await replayEvents(1);
   connectStream(sessionId);
@@ -2637,6 +3167,7 @@ async function refreshSessions() {
   ) || null;
   renderSessions(cachedSessions);
   renderSessionBrief();
+  renderFollowUpComposer();
   await syncDisplayedEvidence();
 }
 
@@ -2721,64 +3252,97 @@ function getConfiguredWorkflowProviders(workflow) {
   return Object.values(workflowRoleAssignments[workflow] || {}).filter(Boolean);
 }
 
-function shouldShowNewsOllamaModel() {
-  const roleValues = getConfiguredWorkflowProviders('news');
-  return [...roleValues, newsJudgeSelect?.value].includes('ollama');
+function getWorkflowOllamaControls(workflow) {
+  if (workflow === 'project') {
+    return {
+      group: projectOllamaModelGroup,
+      select: projectOllamaModelSelect,
+      errorStatus: executeStatus,
+    };
+  }
+
+  return {
+    group: newsOllamaModelGroup,
+    select: newsOllamaModelSelect,
+    errorStatus: newsCollectStatus,
+  };
 }
 
-function renderOllamaModelOptions(models, preferredValue = '') {
-  if (!newsOllamaModelSelect) return;
+function shouldShowWorkflowOllamaModel(workflow) {
+  if (workflow === 'project' && !canProjectUseOllama()) {
+    return false;
+  }
+
+  const roleValues = getConfiguredWorkflowProviders(workflow);
+  const judgeValue = workflow === 'project' ? projectJudgeSelect?.value : newsJudgeSelect?.value;
+  return [...roleValues, judgeValue].some((value) => isOllamaProviderValue(value));
+}
+
+function renderOllamaModelOptions(select, models, preferredValue = '') {
+  if (!select) return;
 
   const options = Array.isArray(models) ? models : [];
-  const previous = preferredValue || newsOllamaModelSelect.value;
+  const previous = preferredValue || select.value;
 
   if (options.length === 0) {
-    newsOllamaModelSelect.innerHTML = '<option value="">사용 가능한 모델이 없습니다</option>';
-    newsOllamaModelSelect.disabled = true;
+    select.innerHTML = '<option value="">사용 가능한 모델이 없습니다</option>';
+    select.disabled = true;
     return;
   }
 
-  newsOllamaModelSelect.innerHTML = [
+  select.innerHTML = [
     '<option value="">모델을 선택하세요</option>',
     ...options.map((model) => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.name || model.id)}</option>`),
   ].join('');
-  newsOllamaModelSelect.disabled = false;
+  select.disabled = false;
 
   if (previous && options.some((model) => model.id === previous)) {
-    newsOllamaModelSelect.value = previous;
+    select.value = previous;
   }
 }
 
 async function refreshOllamaModels() {
-  if (!newsOllamaModelSelect) return;
+  const modelSelects = [projectOllamaModelSelect, newsOllamaModelSelect].filter(Boolean);
+  if (modelSelects.length === 0) return;
 
-  const previousValue = newsOllamaModelSelect.value;
-  newsOllamaModelSelect.disabled = true;
-  newsOllamaModelSelect.innerHTML = '<option value="">모델을 불러오는 중입니다...</option>';
+  const previousValues = new Map();
+  modelSelects.forEach((select) => {
+    previousValues.set(select, select.value);
+    select.disabled = true;
+    select.innerHTML = '<option value="">모델을 불러오는 중입니다...</option>';
+  });
 
   const { ok, data } = await fetchJson('/api/providers/ollama/models');
   if (!ok) {
     cachedOllamaModels = [];
-    newsOllamaModelSelect.innerHTML = '<option value="">모델 목록을 불러오지 못했습니다</option>';
-    newsOllamaModelSelect.disabled = true;
-    if (newsCollectStatus) {
-      newsCollectStatus.textContent = data.error || 'Ollama 모델 목록을 불러오지 못했습니다.';
+    modelSelects.forEach((select) => {
+      select.innerHTML = '<option value="">모델 목록을 불러오지 못했습니다</option>';
+      select.disabled = true;
+    });
+    const message = data.error || 'Ollama 모델 목록을 불러오지 못했습니다.';
+    if (newsCollectStatus && pageWorkflow === 'news') {
+      newsCollectStatus.textContent = message;
+    } else if (executeStatus && pageWorkflow === 'project') {
+      executeStatus.textContent = message;
     }
     return;
   }
 
   cachedOllamaModels = data.models || [];
-  renderOllamaModelOptions(cachedOllamaModels, previousValue);
+  modelSelects.forEach((select) => {
+    renderOllamaModelOptions(select, cachedOllamaModels, previousValues.get(select) || '');
+  });
 }
 
-async function syncNewsOllamaModelField() {
-  if (!newsOllamaModelGroup) return;
+async function syncWorkflowOllamaModelField(workflow) {
+  const { group, select } = getWorkflowOllamaControls(workflow);
+  if (!group) return;
 
-  const visible = shouldShowNewsOllamaModel();
-  newsOllamaModelGroup.classList.toggle('collapsed', !visible);
+  const visible = shouldShowWorkflowOllamaModel(workflow);
+  group.classList.toggle('collapsed', !visible);
 
-  if (!visible && newsOllamaModelSelect) {
-    newsOllamaModelSelect.value = '';
+  if (!visible && select) {
+    select.value = '';
     return;
   }
 
@@ -2796,24 +3360,26 @@ async function refreshProviderOptions() {
     label: buildProviderOptionLabel(provider),
     disabled: !provider.available,
     title: provider.reason || '',
+    type: provider.type,
   }));
 
   const judgeProviderNames = (data.judgeOptions || []).filter((value) => value !== 'both');
   const judgeProviderOptions = judgeProviderNames.length > 0
     ? judgeProviderNames.map((name) => {
         const match = cachedProviderOptions.find((option) => option.value === name);
-        return match || { value: name, label: name, disabled: false, title: '' };
+        return match || { value: name, label: name, disabled: false, title: '', type: 'legacy' };
       })
     : cachedProviderOptions;
 
   cachedJudgeOptions = [
     ...judgeProviderOptions,
-    { value: 'both', label: 'both', disabled: false, title: 'Prefer Claude as synthesizer' },
+    { value: 'both', label: 'both', disabled: false, title: 'Prefer Claude as synthesizer', type: 'legacy' },
   ];
   setSelectOptions(projectJudgeSelect, getWorkflowJudgeOptions('project'), 'claude');
   setSelectOptions(newsJudgeSelect, getWorkflowJudgeOptions('news'), 'claude');
   renderAllWorkflowTemplateEditors();
-  await syncNewsOllamaModelField();
+  await syncWorkflowOllamaModelField('project');
+  await syncWorkflowOllamaModelField('news');
 }
 
 function toInt(value, fallback) {
@@ -3319,18 +3885,18 @@ function downloadTextFile(filename, content, mimeType = 'text/plain;charset=utf-
   URL.revokeObjectURL(url);
 }
 
+function setAdvancedPanelOpen(button, panel, open) {
+  if (!button || !panel) return;
+  panel.classList.toggle('collapsed', !open);
+  button.textContent = open ? '고급 설정 닫기' : '고급 설정 보기';
+}
+
 function bindAdvancedToggle(button, panel) {
   if (!button || !panel) return;
 
-  const update = () => {
-    const open = !panel.classList.contains('collapsed');
-    button.textContent = open ? '고급 설정 닫기' : '고급 설정 보기';
-  };
-
-  update();
+  setAdvancedPanelOpen(button, panel, !panel.classList.contains('collapsed'));
   button.addEventListener('click', () => {
-    panel.classList.toggle('collapsed');
-    update();
+    setAdvancedPanelOpen(button, panel, panel.classList.contains('collapsed'));
   });
 }
 
@@ -3405,6 +3971,7 @@ if (projectForm) {
     const judge = String(formData.get('judge') || 'claude');
     const executionCwd = String(formData.get('executionCwd') || '').trim();
     const noContext = formData.get('noContext') !== null;
+    const ollamaModel = String(formData.get('ollamaModel') || '').trim();
     const filesInput = projectForm.querySelector('input[name="questionFiles"]');
     const { attachments, warnings } = await buildQuestionAttachments(filesInput?.files);
     const { attachment: ideaAttachment, truncated: ideaAttachmentTruncated } = buildProjectIdeaAttachment(ideaStudioValues);
@@ -3428,6 +3995,7 @@ if (projectForm) {
         executionCwd: executionCwd || undefined,
         attachments,
         workflowKind: 'project',
+        ollamaModel: ollamaModel || undefined,
       },
     });
 
@@ -3612,6 +4180,13 @@ async function startFollowUpSession() {
     return;
   }
 
+  const followUpConfig = resolveFollowUpConfiguration();
+  if (!followUpConfig.ok) {
+    executeStatus.textContent = followUpConfig.error;
+    updateFollowUpStatus(followUpConfig.error);
+    return;
+  }
+
   const topics = normalizeFollowUpTopics(followUpTopicInput?.value);
   if (topics.length === 0) {
     executeStatus.textContent = '새 주제를 먼저 입력하세요.';
@@ -3620,6 +4195,8 @@ async function startFollowUpSession() {
     return;
   }
 
+  currentParticipants = normalizeParticipants(followUpConfig.config.participants);
+  renderParticipantLanes();
   followUpRequestInFlight = true;
   renderFollowUpComposer();
   executeStatus.textContent = `${activeSessionId} 결론을 바탕으로 새 주제 토의를 시작하는 중입니다...`;
@@ -3633,6 +4210,15 @@ async function startFollowUpSession() {
       body: JSON.stringify({
         question: buildFollowUpQuestion(topics.join('\n')),
         timeoutMs: getActiveTimeoutMs(),
+        rounds: followUpConfig.config.rounds,
+        judge: followUpConfig.config.judge,
+        mode: followUpConfig.config.mode,
+        participants: followUpConfig.config.participants,
+        noContext: followUpConfig.config.noContext,
+        executionCwd: followUpConfig.config.executionCwd,
+        snapshotId: followUpConfig.config.snapshotId,
+        workflowKind: followUpConfig.config.workflowKind,
+        ollamaModel: followUpConfig.config.ollamaModel,
       }),
     }));
   } finally {
@@ -3742,8 +4328,18 @@ if (exportObsidianButton) {
 
     const note = buildSessionObsidianNote(result.session, result.events);
     const filename = `${sanitizeFileName(result.session.question || activeSessionId)}-${activeSessionId.slice(0, 8)}-obsidian.md`;
+    const saveResult = await saveSessionNoteToObsidianVault(filename, note, result.session.workflowKind);
+
+    if (saveResult.ok) {
+      executeStatus.textContent = `Obsidian Vault에 저장했습니다: ${saveResult.data.relativePath}`;
+      if (saveResult.data.openAfterSave && saveResult.data.obsidianUrl) {
+        openObsidianUrl(saveResult.data.obsidianUrl);
+      }
+      return;
+    }
+
     downloadTextFile(filename, note, 'text/markdown;charset=utf-8');
-    executeStatus.textContent = `Obsidian 노트를 내보냈습니다: ${filename}`;
+    executeStatus.textContent = `${saveResult.data?.error || 'Obsidian Vault 저장에 실패했습니다.'} 다운로드 파일로 대체했습니다: ${filename}`;
   });
 }
 
@@ -3840,9 +4436,8 @@ bindAdvancedToggle(newsAdvancedToggle, newsAdvancedFields);
 ].forEach(([workflow, control]) => {
   control?.addEventListener('change', async () => {
     renderWorkflowTemplateEditor(workflow);
-    if (workflow === 'news') {
-      await syncNewsOllamaModelField();
-    }
+    await syncWorkflowOllamaModelField(workflow);
+    renderFollowUpComposer();
   });
 });
 
@@ -3863,9 +4458,8 @@ bindAdvancedToggle(newsAdvancedToggle, newsAdvancedFields);
 
       setWorkflowMode(workflow, nextMode);
       renderWorkflowTemplateEditor(workflow);
-      if (workflow === 'news') {
-        await syncNewsOllamaModelField();
-      }
+      await syncWorkflowOllamaModelField(workflow);
+      renderFollowUpComposer();
     });
   });
 
@@ -3873,14 +4467,50 @@ bindAdvancedToggle(newsAdvancedToggle, newsAdvancedFields);
     setWorkflowCustomParticipantCount(workflow, controls.customCountSelect.value);
     renderWorkflowCustomParticipants(workflow);
     renderWorkflowComposer(workflow);
-    if (workflow === 'news') {
-      await syncNewsOllamaModelField();
-    }
+    await syncWorkflowOllamaModelField(workflow);
+    renderFollowUpComposer();
   });
 });
 
+projectJudgeSelect?.addEventListener('change', async () => {
+  await syncWorkflowOllamaModelField('project');
+  renderFollowUpComposer();
+});
+
 newsJudgeSelect?.addEventListener('change', async () => {
-  await syncNewsOllamaModelField();
+  await syncWorkflowOllamaModelField('news');
+  renderFollowUpComposer();
+});
+
+projectNoContextToggle?.addEventListener('change', async () => {
+  setSelectOptions(projectJudgeSelect, getWorkflowJudgeOptions('project'), 'claude');
+  renderWorkflowTemplateEditor('project');
+  await syncWorkflowOllamaModelField('project');
+  renderFollowUpComposer();
+});
+
+projectExecutionCwdInput?.addEventListener('change', () => {
+  renderFollowUpComposer();
+});
+
+newsExecutionCwdInput?.addEventListener('change', () => {
+  renderFollowUpComposer();
+});
+
+getWorkflowControls('project').modeSelect?.addEventListener('change', () => {
+  renderFollowUpComposer();
+});
+
+getWorkflowControls('news').modeSelect?.addEventListener('change', () => {
+  renderFollowUpComposer();
+});
+
+getWorkflowControls('project').roundsInput?.addEventListener('change', () => {
+  renderFollowUpComposer();
+});
+
+getWorkflowControls('news').roundsInput?.addEventListener('change', () => {
+  renderFollowUpComposer();
 });
 
 roleConfigReloadButton?.addEventListener('click', async () => {
@@ -3908,11 +4538,25 @@ roleConfigResetButton?.addEventListener('click', () => {
   }
 });
 
+obsidianConfigReloadButton?.addEventListener('click', async () => {
+  if (obsidianConfigStatus) {
+    obsidianConfigStatus.textContent = 'Obsidian 설정을 다시 불러오는 중입니다...';
+  }
+  await refreshObsidianConfigEditor();
+});
+
+obsidianConfigSaveButton?.addEventListener('click', async () => {
+  if (obsidianConfigStatus) {
+    obsidianConfigStatus.textContent = 'Obsidian 설정을 저장하는 중입니다...';
+  }
+  await saveObsidianConfigEditor();
+});
+
 async function initSettingsPage() {
   if (roleConfigStatus) {
     roleConfigStatus.textContent = '역할 설정을 불러오는 중입니다...';
   }
-  await refreshRoleConfigEditor();
+  await Promise.all([refreshRoleConfigEditor(), refreshObsidianConfigEditor()]);
 }
 
 async function initWorkbenchPage() {
@@ -3921,6 +4565,8 @@ async function initWorkbenchPage() {
     tasks.push(refreshSnapshots());
   }
   await Promise.all(tasks);
+  await syncWorkflowOllamaModelField('project');
+  await syncWorkflowOllamaModelField('news');
 }
 
 async function init() {

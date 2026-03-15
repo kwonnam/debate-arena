@@ -5,7 +5,7 @@ import { cors } from 'hono/cors';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { readdir, readFile, unlink } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { collectEvidence } from '../news/index.js';
@@ -41,6 +41,7 @@ import {
 } from '../config/state.js';
 import { OllamaCompatProvider } from '../providers/ollama-compat.js';
 import { getDefaultRoleConfigYaml, getRoleConfigTemplateDefaults, loadRoleConfig, saveRoleConfig } from '../roles/config.js';
+import { loadObsidianConfig, resolveObsidianExportTarget, saveObsidianConfig } from '../obsidian/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -99,6 +100,12 @@ interface DebateParticipantInput {
   provider?: string;
   label?: string;
   role?: DebateParticipantRoleInput;
+}
+
+interface ObsidianSaveRequestBody {
+  filename?: string;
+  content?: string;
+  workflowKind?: WorkflowKind;
 }
 
 const EXECUTION_ALLOWLIST = new Set<ExecuteCommand>(['run_debate']);
@@ -500,7 +507,12 @@ export function startDashboardServer(): { url: string; port: number; close: () =
 
     const workflowKind = input.workflowKind
       ?? (snapshot?.kind === 'news' ? 'news' : 'general');
-    const providerWorkflowError = validateWorkflowProviders(workflowKind, parsed.participants, parsed.judge);
+    const providerWorkflowError = validateWorkflowProviders(
+      workflowKind,
+      parsed.participants,
+      parsed.judge,
+      parsed.noContext,
+    );
     if (providerWorkflowError) {
       return { ok: false, status: 400, error: providerWorkflowError };
     }
@@ -598,7 +610,12 @@ export function startDashboardServer(): { url: string; port: number; close: () =
     const workflowKind = sourceSession.metadata.workflowKind
       ?? (snapshot?.kind === 'news' ? 'news' : 'general');
     const judge = parseJudge(sourceSession.metadata.judge) ?? 'claude';
-    const providerWorkflowError = validateWorkflowProviders(workflowKind, participants, judge);
+    const providerWorkflowError = validateWorkflowProviders(
+      workflowKind,
+      participants,
+      judge,
+      Boolean(sourceSession.metadata.noContext),
+    );
     if (providerWorkflowError) {
       return { ok: false, status: 400, error: providerWorkflowError };
     }
@@ -843,6 +860,93 @@ export function startDashboardServer(): { url: string; port: number; close: () =
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : '역할 설정 YAML 저장에 실패했습니다.';
+      return c.json({ error: message }, 400);
+    }
+  });
+
+  app.get('/api/obsidian/config', (c: Context) => {
+    try {
+      const loaded = loadObsidianConfig();
+      return c.json({
+        path: loaded.path,
+        config: loaded.config,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Obsidian 설정을 불러오지 못했습니다.';
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.put('/api/obsidian/config', async (c: Context) => {
+    let body: {
+      vaultPath?: string;
+      folders?: {
+        general?: string;
+        project?: string;
+        news?: string;
+      };
+      openAfterSave?: boolean;
+    };
+
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    try {
+      const saved = saveObsidianConfig({
+        vaultPath: body.vaultPath,
+        folders: body.folders,
+        openAfterSave: body.openAfterSave,
+      });
+      return c.json({
+        ok: true,
+        path: saved.path,
+        config: saved.config,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Obsidian 설정 저장에 실패했습니다.';
+      return c.json({ error: message }, 400);
+    }
+  });
+
+  app.post('/api/obsidian/save', async (c: Context) => {
+    let body: ObsidianSaveRequestBody;
+
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    const filename = String(body.filename || '').trim();
+    const content = typeof body.content === 'string' ? body.content : '';
+    const workflowKind = body.workflowKind;
+
+    if (!filename) {
+      return c.json({ error: 'filename is required' }, 400);
+    }
+
+    if (!content.trim()) {
+      return c.json({ error: 'content is required' }, 400);
+    }
+
+    try {
+      const loaded = loadObsidianConfig();
+      const target = resolveObsidianExportTarget(loaded.config, workflowKind, filename);
+      await mkdir(dirname(target.absolutePath), { recursive: true });
+      await writeFile(target.absolutePath, content, 'utf-8');
+      return c.json({
+        ok: true,
+        vaultPath: target.vaultPath,
+        relativePath: target.relativePath,
+        absolutePath: target.absolutePath,
+        obsidianUrl: target.obsidianUrl,
+        openAfterSave: loaded.config.openAfterSave,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Obsidian Vault 저장에 실패했습니다.';
       return c.json({ error: message }, 400);
     }
   });
@@ -1366,13 +1470,16 @@ function validateWorkflowProviders(
   workflowKind: WorkflowKind,
   participants?: DebateParticipant[],
   judge?: ProviderName | 'both',
+  noContext = false,
 ): string | null {
   if (workflowKind !== 'project') {
     return null;
   }
 
   if (usesOllama(participants, judge)) {
-    return 'Project workflow supports CLI providers only (codex, claude, gemini).';
+    return noContext
+      ? null
+      : 'Project workflow allows Ollama only when project auto-context is disabled.';
   }
 
   return null;

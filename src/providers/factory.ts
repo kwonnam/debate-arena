@@ -463,6 +463,46 @@ export function listProviderOptions(): ProviderOption[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function collectConfiguredOllamaModels(
+  entries: Map<ProviderName, ResolvedProviderEntry>,
+): ModelInfo[] {
+  const configured = new Map<string, ModelInfo>();
+
+  for (const entry of entries.values()) {
+    if (entry.type !== 'ollama-compat') continue;
+
+    const model = normalizeDisplayModel(entry.model);
+    if (!model) continue;
+
+    configured.set(model, {
+      id: model,
+      name: model,
+    });
+  }
+
+  return [...configured.values()];
+}
+
+function mergeModelInfos(...groups: ModelInfo[][]): ModelInfo[] {
+  const merged = new Map<string, ModelInfo>();
+
+  for (const group of groups) {
+    for (const model of group) {
+      const id = String(model?.id || '').trim();
+      if (!id) continue;
+
+      const previous = merged.get(id);
+      merged.set(id, {
+        id,
+        name: String(model.name || previous?.name || id).trim() || id,
+        contextLength: model.contextLength ?? previous?.contextLength,
+      });
+    }
+  }
+
+  return [...merged.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
 export function createProviderMap(
   participants?: readonly (ProviderName | DebateParticipant)[],
   judge?: ProviderName | 'both',
@@ -549,7 +589,8 @@ export function createApplyProvider(providerName: ProviderName): AIProvider {
 
 export async function listProviderModels(providerName: ProviderName): Promise<ModelInfo[]> {
   const providerId = normalizeProviderId(providerName);
-  const entry = resolveProviderEntries().get(providerId);
+  const entries = resolveProviderEntries();
+  const entry = entries.get(providerId);
 
   if (!entry) {
     throw new Error(`Provider '${providerName}' is not configured`);
@@ -569,6 +610,15 @@ export async function listProviderModels(providerName: ProviderName): Promise<Mo
     throw new Error(`Provider '${providerName}' does not expose model listing`);
   }
 
-  const models = await provider.listModels();
-  return models.sort((left, right) => left.id.localeCompare(right.id));
+  const configuredModels = collectConfiguredOllamaModels(entries);
+
+  try {
+    const remoteModels = await provider.listModels();
+    return mergeModelInfos(remoteModels, configuredModels);
+  } catch (error) {
+    if (configuredModels.length > 0) {
+      return configuredModels;
+    }
+    throw error;
+  }
 }

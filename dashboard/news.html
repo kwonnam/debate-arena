@@ -232,7 +232,7 @@
                 <span>프로젝트 자동 컨텍스트를 끕니다</span>
               </label>
 
-              <div class="participant-builder">
+              <div class="participant-builder" id="news-participant-builder">
                 <div class="participant-builder-header">
                   <div>
                     <label>참가자 구성</label>
@@ -338,6 +338,48 @@
           </div>
         </section>
 
+        <section class="workbench-card" id="follow-up-section">
+          <div class="section-heading">
+            <span class="step-badge muted">Next</span>
+            <div>
+              <h2>후속 토의</h2>
+              <p>선택한 완료 세션의 결론을 바탕으로 새 주제를 추가하고 다음 토의를 시작합니다.</p>
+            </div>
+          </div>
+          <div class="follow-up-panel" id="follow-up-panel">
+            <div class="empty-state compact" id="follow-up-empty">
+              <strong>완료된 세션을 선택하세요.</strong>
+              <p>결론이 있는 세션을 고르면 여기서 바로 새 주제를 추가할 수 있습니다.</p>
+            </div>
+            <div class="follow-up-composer" id="follow-up-composer" style="display:none">
+              <div class="follow-up-composer-head">
+                <div>
+                  <h3>새 주제로 후속 토의</h3>
+                  <p>현재 결론을 배경으로 새 주제를 추가해 다음 토의를 바로 시작합니다.</p>
+                </div>
+                <span class="meta-badge">Follow-up</span>
+              </div>
+              <div class="participant-summary-card follow-up-config-card" id="follow-up-config-preview"></div>
+              <div class="follow-up-quickstart" id="follow-up-quickstart" style="display:none"></div>
+              <div class="field">
+                <label for="follow-up-topic">추가할 새 주제</label>
+                <textarea
+                  id="follow-up-topic"
+                  rows="3"
+                  placeholder="예: 이 결론이 다음 분기 제품 전략이나 시장 대응에 어떤 추가 검토를 요구하는가?"
+                ></textarea>
+              </div>
+              <div class="follow-up-suggestions" id="follow-up-suggestions" style="display:none"></div>
+              <p class="field-hint follow-up-status" id="follow-up-status">
+                결론에서 파생된 새 주제를 입력하면 이전 합의와 쟁점을 이어받아 후속 토의를 시작합니다.
+              </p>
+              <div class="execute-actions follow-up-actions">
+                <button class="button" type="button" id="follow-up-start">새 토의 시작</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="workbench-card">
           <div class="section-heading">
             <span class="step-badge muted">기록</span>
@@ -405,30 +447,6 @@
         <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
           <span class="synthesis-hero-label">Synthesis</span>
           <div id="synthesis"></div>
-          <div class="follow-up-composer" id="follow-up-composer" style="display:none">
-            <div class="follow-up-composer-head">
-              <div>
-                <h3>새 주제로 후속 토의</h3>
-                <p>현재 결론을 배경으로 새 주제를 추가해 다음 토의를 바로 시작합니다.</p>
-              </div>
-              <span class="meta-badge">Follow-up</span>
-            </div>
-            <div class="field">
-              <label for="follow-up-topic">추가할 새 주제</label>
-              <textarea
-                id="follow-up-topic"
-                rows="3"
-                placeholder="예: 이 결론이 다음 분기 제품 전략이나 시장 대응에 어떤 추가 검토를 요구하는가?"
-              ></textarea>
-            </div>
-            <div class="follow-up-suggestions" id="follow-up-suggestions" style="display:none"></div>
-            <p class="field-hint follow-up-status" id="follow-up-status">
-              결론에서 파생된 새 주제를 입력하면 이전 합의와 쟁점을 이어받아 후속 토의를 시작합니다.
-            </p>
-            <div class="execute-actions follow-up-actions">
-              <button class="button" type="button" id="follow-up-start">새 토의 시작</button>
-            </div>
-          </div>
         </section>
       </main>
     </div>

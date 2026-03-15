@@ -65,7 +65,7 @@
 
 추가 제약:
 
-- 프로젝트·기획 페이지는 `codex / claude / gemini`만 허용
+- 프로젝트·기획 페이지는 기본적으로 `codex / claude / gemini`를 사용하고, 자동 컨텍스트를 끈 기획 세션에서는 `ollama`도 허용
 - 뉴스 페이지는 `ollama`를 포함한 전체 provider 허용
 - 뉴스 페이지에서 `ollama`가 선택되면 모델 드롭다운을 함께 노출
 

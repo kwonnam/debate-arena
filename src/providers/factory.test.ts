@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { resolve as resolvePath } from 'node:path';
-import { buildClaudeCliCommand, buildCodexCliCommand } from './factory.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve as resolvePath } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildClaudeCliCommand, buildCodexCliCommand, listProviderModels } from './factory.js';
 
 describe('buildCodexCliCommand', () => {
   it('injects web search before exec', () => {
@@ -51,5 +53,59 @@ describe('buildClaudeCliCommand', () => {
     })).toBe(
       `claude -p --mcp-config ${JSON.stringify(resolvePath('./.claude/debate-arena.mcp.json'))}`,
     );
+  });
+});
+
+describe('listProviderModels', () => {
+  const originalFetch = globalThis.fetch;
+  let tempDir = '';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
+    delete process.env.FFM_CONFIG_V2;
+    if (tempDir) {
+      rmSync(tempDir, { recursive: true, force: true });
+      tempDir = '';
+    }
+  });
+
+  it('merges config.v2 ollama models with remote model listing', async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'debate-arena-config-v2-'));
+    const configPath = join(tempDir, 'config.v2.json');
+
+    writeFileSync(configPath, JSON.stringify({
+      version: 2,
+      providers: {
+        'ollama-local': {
+          type: 'ollama-compat',
+          baseUrl: 'http://127.0.0.1:11434',
+          model: 'llama3.2',
+        },
+        'ollama-cloud-qwen3': {
+          type: 'ollama-compat',
+          baseUrl: 'https://ollama.com',
+          model: 'qwen3-coder-next',
+          apiKeyEnvVar: 'OLLAMA_API_KEY',
+        },
+      },
+    }), 'utf-8');
+
+    process.env.FFM_CONFIG_V2 = configPath;
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      data: [
+        { id: 'llama3', name: 'llama3' },
+        { id: 'qwen2.5', name: 'qwen2.5' },
+      ],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const models = await listProviderModels('ollama-local');
+
+    expect(models.map((model) => model.id)).toEqual([
+      'llama3',
+      'llama3.2',
+      'qwen2.5',
+      'qwen3-coder-next',
+    ]);
   });
 });
