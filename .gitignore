@@ -17,3 +17,6 @@ collectProjectContext
 정책이
 /config.v2.json
 ffm-snapshots/
+.playwright-cli/
+debate-arena-snapshots/*.json
+output/telegram/

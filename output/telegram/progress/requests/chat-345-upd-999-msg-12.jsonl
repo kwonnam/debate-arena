@@ -1,2 +1,0 @@
-{"timestamp":"2026-03-19T13:04:43.817Z","level":"INFO","event":"test_event","requestId":"chat-345-upd-999-msg-12","updateId":999,"chatId":345,"messageId":12,"userId":678,"meta":{"token":"[REDACTED]","questionPreview":"hello"}}
-{"timestamp":"2026-03-19T13:47:48.906Z","level":"INFO","event":"test_event","requestId":"chat-345-upd-999-msg-12","updateId":999,"chatId":345,"messageId":12,"userId":678,"meta":{"token":"[REDACTED]","questionPreview":"hello"}}
