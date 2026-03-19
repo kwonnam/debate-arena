@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   buildDebaterSystemPrompt,
   buildDiscussionSynthesisPrompt,
+  buildPlainLanguageRewritePrompt,
+  buildRedBlueSynthesisPrompt,
+  buildRoundStateContextSection,
   buildRoundEvidenceSection,
   buildSynthesisPrompt,
   buildSynthesisPromptWithEvidence,
@@ -208,5 +211,58 @@ describe('buildDiscussionSynthesisPrompt', () => {
     expect(prompt).toContain('## Recommendation');
     expect(prompt).toContain('## Open Questions');
     expect(prompt).toContain('## Next Steps');
+  });
+});
+
+describe('buildRedBlueSynthesisPrompt', () => {
+  it('ADR 스타일 설계 권고 섹션을 요구한다', () => {
+    const prompt = buildRedBlueSynthesisPrompt('어떤 구조로 가야 할까?', [
+      { label: '아키텍트' as const, round: 1, content: '위험을 먼저 줄여야 한다.' },
+    ]);
+
+    expect(prompt).toContain('red-team / blue-team review');
+    expect(prompt).toContain('## Problem Context');
+    expect(prompt).toContain('## Decision Board Snapshot');
+    expect(prompt).toContain('## Alternatives Considered');
+    expect(prompt).toContain('## Selected Option');
+    expect(prompt).toContain('## Decision Rationale');
+    expect(prompt).toContain('## Implementation Strategy');
+  });
+});
+
+describe('buildRoundStateContextSection', () => {
+  it('결정 보드 문구를 사용한다', () => {
+    const section = buildRoundStateContextSection([{
+      round: 1,
+      summary: '요약',
+      keyIssues: ['쟁점 1'],
+      agreements: ['합의 1'],
+      nextFocus: ['검증 1'],
+      shouldSuggestStop: false,
+      source: 'judge',
+      transcriptFallbackUsed: false,
+    }]);
+
+    expect(section).toContain('## Decision Board So Far');
+    expect(section).toContain('쟁점 1');
+    expect(section).toContain('합의 1');
+  });
+});
+
+describe('buildPlainLanguageRewritePrompt', () => {
+  it('쉬운 언어 재작성 제약을 포함한다', () => {
+    const prompt = buildPlainLanguageRewritePrompt('어떻게 도입할까?', '원래 결론', 'plan');
+
+    expect(prompt).toContain('agreed implementation plan');
+    expect(prompt).toContain('Keep the same meaning');
+    expect(prompt).toContain('Output only the rewritten conclusion');
+    expect(prompt).toContain('원래 결론');
+  });
+
+  it('red-blue 모드에서는 설계 권고 재작성을 사용한다', () => {
+    const prompt = buildPlainLanguageRewritePrompt('어떤 구조가 맞을까?', '원래 권고', 'red-blue');
+
+    expect(prompt).toContain('design recommendation memo');
+    expect(prompt).toContain('원래 권고');
   });
 });

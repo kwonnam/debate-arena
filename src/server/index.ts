@@ -8,9 +8,9 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { collectEvidence } from '../news/index.js';
+import { collectEvidence, writeSnapshot } from '../news/index.js';
 import type { EvidenceKind, EvidenceSnapshot } from '../news/snapshot.js';
-import { summarizeSnapshot } from '../news/snapshot.js';
+import { createCuratedSnapshot, summarizeSnapshot } from '../news/snapshot.js';
 import type { QueryTransformMode, SearchLanguageScope } from '../news/search-plan.js';
 import type { DebateMode, DebateOptions, ProviderName, WorkflowKind } from '../types/debate.js';
 import type { DebateEvent, DebateEventEnvelope } from '../types/debate-events.js';
@@ -676,7 +676,7 @@ export function startDashboardServer(): { url: string; port: number; close: () =
   app.get('/', (c: Context) => c.html(dashboardIndex));
   app.use('/*', serveStatic({ root: dashboardDir }));
 
-  const SNAPSHOT_DIR = './ffm-snapshots';
+  const SNAPSHOT_DIR = './debate-arena-snapshots';
 
   app.get('/api/snapshots', async (c: Context) => {
     try {
@@ -783,6 +783,61 @@ export function startDashboardServer(): { url: string; port: number; close: () =
         error: message,
       });
       return c.json({ error: message }, 500);
+    }
+  });
+
+  app.post('/api/snapshots/derive', async (c: Context) => {
+    let body: {
+      snapshotId?: string;
+      articleUrls?: string[];
+      query?: string;
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+
+    const snapshotId = String(body.snapshotId || '').trim();
+    const articleUrls = Array.isArray(body.articleUrls)
+      ? body.articleUrls.map((url) => String(url || '').trim()).filter(Boolean)
+      : [];
+    const queryOverride = typeof body.query === 'string' ? body.query.trim() : '';
+
+    if (!snapshotId) {
+      return c.json({ error: 'snapshotId is required' }, 400);
+    }
+    if (articleUrls.length === 0) {
+      return c.json({ error: 'articleUrls must contain at least one URL' }, 400);
+    }
+
+    const sourceSnapshot = await loadSnapshotById(snapshotId);
+    if (!sourceSnapshot) {
+      return c.json({ error: 'Snapshot not found' }, 404);
+    }
+
+    try {
+      const curated = createCuratedSnapshot(sourceSnapshot, articleUrls, queryOverride);
+      await writeSnapshot(curated, SNAPSHOT_DIR);
+      const summary = summarizeSnapshot(curated);
+      logDashboard('INFO', 'snapshot_derived_completed', {
+        sourceSnapshotId: snapshotId,
+        snapshotId: summary.id,
+        articleCount: summary.articleCount,
+        kind: summary.kind,
+      });
+      return c.json({
+        ...summary,
+        snapshotId: summary.id,
+        createdAt: summary.collectedAt,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to derive snapshot';
+      logDashboard('ERROR', 'snapshot_derived_failed', {
+        sourceSnapshotId: snapshotId,
+        error: message,
+      });
+      return c.json({ error: message }, 400);
     }
   });
 
@@ -1326,6 +1381,7 @@ function summarizeEventForLog(event: DebateEvent): Record<string, unknown> {
         status: event.payload.status,
         judge: event.payload.judge,
         contentChars: event.payload.content?.length ?? 0,
+        simplifiedChars: event.payload.simplifiedContent?.length ?? 0,
       };
     case 'cancelled':
       return {
@@ -1449,7 +1505,7 @@ function parseJudge(input: unknown): ProviderName | 'both' | undefined {
 function parseDebateMode(input: unknown): DebateMode | undefined {
   if (typeof input !== 'string') return undefined;
   const mode = input.trim().toLowerCase();
-  if (mode === 'debate' || mode === 'discussion' || mode === 'plan') {
+  if (mode === 'debate' || mode === 'discussion' || mode === 'red-blue' || mode === 'plan') {
     return mode;
   }
   return undefined;

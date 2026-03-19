@@ -1,0 +1,113 @@
+{
+  "id": "38a3a6bc1673",
+  "kind": "web",
+  "query": "엔비디아 주가 예측",
+  "collectedAt": "2026-03-17T13:44:04.635Z",
+  "sources": [
+    "Brave Web"
+  ],
+  "articles": [
+    {
+      "title": "Nvidia Q4 FY2026 Earnings: NVDA stock today: Big Nvidia (NVDA) Q4 earnings today: here’s what investors will watch from the Jensen Huang-led chip giant - NVDA stock forecast - The Economic Times",
+      "source": "The Economic Times",
+      "url": "https://economictimes.indiatimes.com/news/international/us/big-nvidia-nvda-q4-earnings-today-heres-what-investors-will-watch-from-the-jensen-huang-led-chip-giant-nvda-stock-forecast/articleshow/128781200.cms?from=mdr",
+      "publishedAt": "3 weeks ago",
+      "summary": "Despite blockbuster product launches, Nvidia stock has gained just over 3% this year. By comparison: ... Intel is up nearly 25% This disconnect between AI headlines and stock price action reflects investor caution. Markets are forward-looking. They want confirmation that explosive 2024 and 2025 growth can continue.",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "Strait Talk: Stocks Up on Slight Dip in Oil Prices",
+      "source": "Charles Schwab",
+      "url": "https://www.schwab.com/learn/story/stock-market-update-open",
+      "publishedAt": "1 day ago",
+      "summary": "Nvidia&#x27;s (NVDA) GPU Tech Conference (GTC) features a speech by CEO Jensen Huang at 2 p.m. ET today that might momentarily distract from the drumbeat of war news. &quot;Huang will likely deliver several AI-related headlines, which could have an impact on tech stocks,&quot; said Nathan Peterson, director of derivatives research and strategy at the Schwab Center for Financial Research (SCFR), in his Weekly Trader&#x27;s Outlook.",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "NVIDIA CORPORATION (NVDA) Stock, Price, News ...",
+      "source": "MSN",
+      "url": "https://www.msn.com/en-us/money/stockdetails/nvda-us-stock/fi-a1yv52",
+      "publishedAt": "2 days ago",
+      "summary": "MSN Money is your source for the latest stock market quotes, business, economic &amp; financial news, as well as premium research tools to empower your investing journey",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "What is the current Price Target and Forecast for NVIDIA (NVDA)",
+      "source": "Zacks",
+      "url": "https://www.zacks.com/stock/research/NVDA/price-target-stock-forecast",
+      "publishedAt": "2 weeks ago",
+      "summary": "Updated Mar 24, 2025 04:00 PM ET · <strong>After-Market: $120.94 -0.47 (-0.39%)</strong> 7:58 PM ET · Add to portfolio · Zacks Rank: More Info · This is our short term rating system that serves as a timeliness indicator for stocks over the next 1 to 3 months. How good is it?",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "NVDA Stock Surges After Strong Q4 2026 Earnings",
+      "source": "MarketBeat",
+      "url": "https://www.marketbeat.com/originals/nvidias-ai-boom-isnt-slowing-after-blowout-q4/",
+      "publishedAt": "3 weeks ago",
+      "summary": "NVIDIA&#x27;s stock price rally is far from over, at least as indicated by its results, guidance, analysts&#x27; sentiment trends, and institutional accumulation.",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "My Prediction For Nvidia Stock in 2025 Came True. Here's What I Expect to Happen Next. | The Motley Fool",
+      "source": "The Motley Fool",
+      "url": "https://www.fool.com/investing/2026/01/28/my-prediction-for-nvidia-stock-in-2025-came-true-h/",
+      "publishedAt": "January 28, 2026",
+      "summary": "From concerns about AI spending to worries about potential import tariffs, and finally, questions about a potential AI bubble, these stocks met their share of headwinds. Still, my prediction concerning market bellwether, Nvidia (<strong>NVDA +0.80%),</strong> in ...",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "Nvidia's optimistic forecast fails to convince Wall Street | Reuters",
+      "source": "Reuters",
+      "url": "https://www.reuters.com/technology/nvidia-shares-dip-forecast-fails-calm-overspending-fears-2025-02-27/",
+      "publishedAt": "February 27, 2025",
+      "summary": "Chart displays rise in Nvidia&#x27;s market capitalization, making it the world&#x27;s second most valuable company · Of the 63 analysts covering the stock, 33 have a &quot;strong buy&quot; rating, as per LSEG data. The <strong>median price target stood at $175</strong>, implying ...",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "NVIDIA (NVDA) Stock Forecast & Price Prediction 2026–2030 | CoinCodex",
+      "source": "CoinCodex",
+      "url": "https://coincodex.com/stock/NVDA/price-prediction/",
+      "publishedAt": "2 weeks ago",
+      "summary": "Based on the current trends, our prediction estimates that the price of NVDA stock will increase by ... Our prediction anticipates that NVIDIA stock will not go down tomorrow.",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "NVIDIA Corporation NVDA Stock Forecast & Price Target",
+      "source": "Yahoo! Finance",
+      "url": "https://finance.yahoo.com/research/stock-forecast/NVDA/",
+      "publishedAt": "January 15, 2026",
+      "summary": "Find the latest NVIDIA Corporation NVDA analyst stock forecast, price target, and recommendation trends with in-depth analysis from research reports.",
+      "relevanceScore": 0.75
+    },
+    {
+      "title": "I Nailed My Nvidia Market Cap Prediction in 2025. Here's Where I Predict It's Going in 2026 (Hint: You're Going to Want to Buy Now) | The Motley Fool",
+      "source": "The Motley Fool",
+      "url": "https://www.fool.com/investing/2026/01/22/i-nailed-my-nvidia-market-cap-prediction-in-2025-h/",
+      "publishedAt": "January 22, 2026",
+      "summary": "However, considering its growth rates, I think it has earned it. If Nvidia is still trading at 40 times forward earnings at this time next year, based on analysts&#x27; consensus forecast, it would be priced at <strong>nearly $350 per share</strong>.",
+      "relevanceScore": 0.75
+    }
+  ],
+  "excludedCount": 0,
+  "searchPlan": {
+    "detectedLanguage": "ko",
+    "llmApplied": true,
+    "queries": [
+      {
+        "query": "엔비디아 주가 예측 2025",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "NVIDIA stock price prediction 2025",
+        "language": "en",
+        "source": "expanded"
+      },
+      {
+        "query": "NVIDIA share price forecast AI chips",
+        "language": "en",
+        "source": "expanded"
+      }
+    ]
+  }
+}

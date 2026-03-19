@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createSnapshotId, summarizeSnapshot } from './snapshot.js';
+import { createCuratedSnapshot, createSnapshotId, summarizeSnapshot } from './snapshot.js';
 
 describe('createSnapshotId', () => {
   it('동일한 입력에 동일한 해시를 반환한다', () => {
@@ -60,5 +60,48 @@ describe('createSnapshotId', () => {
     expect(summary.sources).toEqual(['rss', 'newsapi']);
     expect(summary.topDomains).toEqual(['example.com', 'news.example.org']);
     expect(summary.excludedCount).toBe(1);
+  });
+});
+
+describe('createCuratedSnapshot', () => {
+  const baseSnapshot = {
+    id: 'base-snap',
+    kind: 'news' as const,
+    query: 'ai chips',
+    collectedAt: '2026-03-07T00:00:00.000Z',
+    sources: ['rss', 'newsapi'],
+    excludedCount: 1,
+    articles: [
+      {
+        title: 'A',
+        source: 'RSS',
+        url: 'https://example.com/a',
+        publishedAt: '2026-03-07T00:00:00.000Z',
+        summary: 'A',
+        relevanceScore: 0.9,
+      },
+      {
+        title: 'B',
+        source: 'NewsAPI',
+        url: 'https://example.com/b',
+        publishedAt: '2026-03-07T00:00:00.000Z',
+        summary: 'B',
+        relevanceScore: 0.8,
+      },
+    ],
+  };
+
+  it('선택한 기사만 남긴 curated snapshot을 만든다', () => {
+    const curated = createCuratedSnapshot(baseSnapshot, ['https://example.com/b']);
+
+    expect(curated.kind).toBe('news');
+    expect(curated.articles).toHaveLength(1);
+    expect(curated.articles[0]?.url).toBe('https://example.com/b');
+    expect(curated.sources).toContain('manual-selection');
+    expect(curated.excludedCount).toBe(2);
+  });
+
+  it('선택한 기사가 없으면 오류를 던진다', () => {
+    expect(() => createCuratedSnapshot(baseSnapshot, [])).toThrow(/At least one article/i);
   });
 });

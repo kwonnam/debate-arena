@@ -3,7 +3,7 @@ import { writeSnapshot, readSnapshot } from './snapshot-io.js';
 import type { EvidenceSnapshot } from './snapshot.js';
 import { mkdirSync, rmSync } from 'node:fs';
 
-const TEST_DIR = '/tmp/ffm-test-snapshots';
+const TEST_DIR = '/tmp/debate-arena-test-snapshots';
 
 const mockSnapshot: EvidenceSnapshot = {
   id: 'abc123',

@@ -1,0 +1,2 @@
+{"timestamp":"2026-03-17T14:38:54.815Z","level":"INFO","event":"polling_started","requestId":"system-poller","meta":{"timeoutSeconds":30,"once":false,"allowedChatIds":[]}}
+{"timestamp":"2026-03-19T13:30:37.228Z","level":"INFO","event":"polling_started","requestId":"system-poller","meta":{"timeoutSeconds":30,"once":false,"allowedChatIds":[]}}

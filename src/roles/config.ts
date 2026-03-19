@@ -74,11 +74,146 @@ workflows:
             defaultProvider: claude
             instructions:
               - 누가 이익을 얻고 누가 저항할지 설명한다.
+      - id: news-stock-thesis-board
+        label: 주가 전망 · 밸류에이션 · 기술적 흐름 · 뉴스 심리 · 리스크
+        description: 개별 종목의 주가를 가치평가, 펀더멘털, 차트, 뉴스 심리, 리스크 관리 관점에서 함께 토의하는 5자 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: valuation-analyst
+            label: 가치평가 애널리스트
+            focus: 현재 가격이 반영한 기대와 적정 가치 범위를 추정합니다.
+            defaultProvider: codex
+            instructions:
+              - bull, base, bear 시나리오별 적정 가치 범위를 제시한다.
+              - 현재 가격이 어떤 성장률과 마진 가정을 선반영하는지 설명한다.
+            requiredQuestions:
+              - 현재 가격은 어떤 기대를 이미 반영하고 있는가?
+              - 6개월, 12개월 기준 적정 가치 범위는 어디인가?
+          - roleId: fundamentals-analyst
+            label: 펀더멘털 애널리스트
+            focus: 실적, 현금흐름, 가이던스, 경쟁 우위의 지속 가능성을 검토합니다.
+            defaultProvider: claude
+            instructions:
+              - 매출 성장, 이익률, 현금흐름을 분리해서 해석한다.
+              - 실적 개선이 일회성인지 구조적인지 구분한다.
+            requiredQuestions:
+              - 가장 중요한 펀더멘털 변수는 무엇인가?
+              - 최근 실적과 가이던스는 추세를 강화하는가?
+          - roleId: technical-analyst
+            label: 기술적 흐름 애널리스트
+            focus: 추세, 거래량, 지지·저항, 포지셔닝 신호를 해석합니다.
+            defaultProvider: gemini
+            instructions:
+              - 추세와 이벤트성 급등락을 구분한다.
+              - 지지선, 저항선, 거래량 변화를 함께 본다.
+            requiredQuestions:
+              - 지금 차트가 추세 지속인지 과열인지 무엇을 시사하는가?
+              - 단기 트레이더가 주시할 가격대는 어디인가?
+          - roleId: news-sentiment-analyst
+            label: 뉴스 심리 애널리스트
+            focus: 뉴스 흐름, 투자심리, 서사 변화가 가격에 주는 압력을 읽습니다.
+            defaultProvider: codex
+            instructions:
+              - 호재/악재 기사 수보다 서사의 방향성과 강도를 본다.
+              - 같은 뉴스라도 주가에 반영됐는지 여부를 구분한다.
+            requiredQuestions:
+              - 시장 서사는 어떤 방향으로 기울어 있는가?
+              - 아직 과소반영된 촉매나 과대반응 구간이 있는가?
+          - roleId: risk-manager
+            label: 리스크 매니저
+            focus: 하방 리스크, 무효화 조건, 포지션 관리와 관찰 지표를 정리합니다.
+            defaultProvider: claude
+            instructions:
+              - 상승 논리보다 먼저 무효화 조건을 명확히 적는다.
+              - 확인해야 할 지표와 손절/재평가 기준을 함께 제시한다.
+            requiredQuestions:
+              - 이 시나리오를 깨는 핵심 리스크는 무엇인가?
+              - 앞으로 추적할 이벤트와 경고 신호는 무엇인가?
+      - id: news-stock-bull-bear-risk
+        label: 주가 전망 · Bull / Bear / Risk
+        description: 강세론, 약세론, 리스크 관리 관점을 정면으로 붙여 예측을 압축하는 3자 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: bull-thesis
+            label: Bull Thesis
+            focus: 시장이 과소평가한 상방 논리와 재평가 촉매를 주장합니다.
+            defaultProvider: codex
+            instructions:
+              - 상승 논리를 숫자와 촉매로 연결한다.
+              - 언제까지 어떤 경로로 재평가될지 말한다.
+            requiredQuestions:
+              - 시장이 과소평가한 상방 요인은 무엇인가?
+              - 어떤 촉매가 재평가를 만드는가?
+          - roleId: bear-thesis
+            label: Bear Thesis
+            focus: 기대 과열, 밸류에이션 부담, 구조적 리스크를 중심으로 반론을 제기합니다.
+            defaultProvider: gemini
+            instructions:
+              - 현재 기대와 밸류에이션이 왜 과도한지 설명한다.
+              - 반례와 실패 사례를 먼저 든다.
+            requiredQuestions:
+              - 하방이 열리는 핵심 가정 붕괴는 무엇인가?
+              - 시장이 과도하게 낙관하는 지점은 어디인가?
+          - roleId: risk-manager
+            label: 리스크 매니저
+            focus: 양측 시나리오의 승부처, 확률, 추적 지표와 포지션 리스크를 정리합니다.
+            defaultProvider: claude
+            instructions:
+              - bull/base/bear 가능성과 추적 지표를 함께 정리한다.
+              - 확신보다 포지션 리스크와 무효화 조건을 우선시한다.
+            requiredQuestions:
+              - 지금 가장 합리적인 대응은 공격, 관망, 회피 중 무엇인가?
+              - 어떤 가격·실적·뉴스 변화가 판단을 뒤집는가?
+      - id: news-stock-event-reaction
+        label: 실적·이벤트 반응 · Earnings / Industry / Flow / Portfolio
+        description: 실적 발표, 제품 공개, 규제 뉴스 같은 개별 이벤트가 종목과 섹터에 미칠 영향을 토의하는 4자 템플릿입니다.
+        recommendedJudge: claude
+        participants:
+          - roleId: earnings-analyst
+            label: 실적 이벤트 애널리스트
+            focus: 실적, 가이던스, 컨퍼런스콜 포인트가 기대 대비 어떤 차이를 만드는지 해석합니다.
+            defaultProvider: codex
+            instructions:
+              - 컨센서스 대비 서프라이즈의 방향과 크기를 구분한다.
+              - 숫자보다 더 중요한 코멘트 변화를 짚는다.
+            requiredQuestions:
+              - 이번 이벤트의 핵심 surprise는 무엇인가?
+              - 다음 분기 기대가 상향 또는 하향될 가능성은?
+          - roleId: industry-competition
+            label: 업계·경쟁 구도 관점
+            focus: 경쟁사, 공급망, 업계 구조 변화가 이벤트 해석을 어떻게 바꾸는지 봅니다.
+            defaultProvider: claude
+            instructions:
+              - 단일 기업 뉴스라도 업계 전체 맥락으로 다시 해석한다.
+              - 경쟁 우위가 강화되는지 약화되는지 구분한다.
+            requiredQuestions:
+              - 경쟁사 대비 해석 포인트는 무엇인가?
+              - 업계 전체에 파급되는 2차 효과가 있는가?
+          - roleId: flow-sentiment
+            label: 수급·심리 관점
+            focus: 수급, 포지셔닝, 투자심리 변화가 단기 주가 반응을 어떻게 증폭하는지 분석합니다.
+            defaultProvider: gemini
+            instructions:
+              - 이벤트의 질과 시장 포지셔닝을 함께 본다.
+              - 단기 과열과 중기 추세 전환을 구분한다.
+            requiredQuestions:
+              - 이번 뉴스가 단기 수급에 주는 압력은 어느 방향인가?
+              - 이미 반영된 기대와 새롭게 생긴 기대를 어떻게 구분할 것인가?
+          - roleId: portfolio-manager
+            label: 포트폴리오 매니저
+            focus: 위 논의를 종합해 지금 취할 행동과 관찰 지표를 결정합니다.
+            defaultProvider: codex
+            instructions:
+              - buy/sell/hold보다 왜 지금 그 행동이 합리적인지 설명한다.
+              - 관찰 지표와 재평가 시점을 반드시 적는다.
+            requiredQuestions:
+              - 지금 가장 합리적인 의사결정은 무엇인가?
+              - 다음 체크포인트 전까지 반드시 봐야 할 지표는 무엇인가?
   project:
     templates:
       - id: project-ux-backend-qa
-        label: UX · 백엔드 · QA
-        description: 사용자 흐름, 구현 복잡도, 회귀 위험을 함께 검토하는 3자 토론 템플릿입니다.
+        label: UX · 디자이너 · 백엔드 · QA
+        description: 사용자 흐름, 화면 구조, 구현 복잡도, 회귀 위험을 함께 검토하는 4자 토론 템플릿입니다.
         recommendedJudge: claude
         participants:
           - roleId: ux
@@ -91,6 +226,16 @@ workflows:
             requiredQuestions:
               - 사용자가 가장 먼저 막히는 지점은 어디인가?
               - 정보 구조를 어떻게 다시 묶어야 하는가?
+          - roleId: designer
+            label: 프로덕트 디자이너
+            focus: 화면 구조, 인터랙션, 시각적 계층, 상태 피드백을 기준으로 개선안을 설계합니다.
+            defaultProvider: gemini
+            instructions:
+              - 사용자 과업을 실제 화면 변화와 컴포넌트 구조로 번역한다.
+              - 빈 상태, 오류 상태, 전환 피드백까지 함께 본다.
+            requiredQuestions:
+              - 핵심 화면에서 무엇을 덜어내고 무엇을 강조해야 하는가?
+              - 상태 변화와 피드백은 사용자에게 어떻게 보여야 하는가?
           - roleId: backend
             label: 백엔드 개발자
             focus: API, 상태 흐름, 운영 복잡도와 구현 비용을 검토합니다.
@@ -101,12 +246,12 @@ workflows:
           - roleId: qa
             label: QA
             focus: 회귀 위험, 검증 범위, 운영 관측성을 기준으로 판단합니다.
-            defaultProvider: gemini
+            defaultProvider: codex
             instructions:
               - 실패 시나리오와 필요한 테스트를 함께 제안한다.
       - id: project-ux-architecture
-        label: UX · 아키텍트
-        description: 사용자 경험과 시스템 구조를 압축적으로 점검하는 2자 토론 템플릿입니다.
+        label: UX · 디자이너 · 아키텍트
+        description: 사용자 경험, 화면 구조, 시스템 경계를 함께 점검하는 3자 토론 템플릿입니다.
         recommendedJudge: claude
         participants:
           - roleId: ux
@@ -115,6 +260,13 @@ workflows:
             defaultProvider: codex
             instructions:
               - 정보 구조와 용어 체계를 정리한다.
+          - roleId: designer
+            label: 프로덕트 디자이너
+            focus: 화면 레이아웃, 인터랙션 흐름, 컴포넌트 책임을 정리합니다.
+            defaultProvider: gemini
+            instructions:
+              - 정보 구조를 실제 화면 배치와 인터랙션으로 연결한다.
+              - 시각적 우선순위와 컴포넌트 재사용 기준을 함께 정리한다.
           - roleId: architect
             label: 아키텍트
             focus: 경계 분리, 확장성, 코드 구조의 일관성을 검토합니다.
@@ -159,7 +311,7 @@ function ensureConfigDir(): void {
 }
 
 function resolveRoleConfigPath(): string {
-  const override = process.env.FFM_ROLE_CONFIG?.trim();
+  const override = process.env.DEBATE_ARENA_ROLE_CONFIG?.trim() || process.env.FFM_ROLE_CONFIG?.trim();
   if (override) {
     return override.startsWith('/') ? override : join(process.cwd(), override);
   }
@@ -236,8 +388,8 @@ function normalizeTemplate(entry: unknown, workflow: RoleWorkflowKind, index: nu
   if (!id || !label || !description) {
     throw new Error(`${workflow} 템플릿 ${index + 1}는 id, label, description이 필요합니다.`);
   }
-  if (roles.length < 2 || roles.length > 3) {
-    throw new Error(`템플릿 ${id}는 역할이 2개 또는 3개여야 합니다.`);
+  if (roles.length < 2 || roles.length > 6) {
+    throw new Error(`템플릿 ${id}는 역할이 2개 이상 6개 이하여야 합니다.`);
   }
 
   const uniqueRoleIds = new Set(roles.map((role) => role.roleId));

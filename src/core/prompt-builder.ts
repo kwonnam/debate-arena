@@ -2,6 +2,7 @@ import type { EvidenceKind, EvidenceSnapshot, NewsArticle } from '../news/snapsh
 import type { DebateMode, DebateRoundState, ParticipantName, ProviderName } from '../types/debate.js';
 import type { DebateParticipant } from '../types/roles.js';
 import { buildParticipantRolePrompt } from '../roles/config.js';
+import { getDebateModeDefinition } from './modes/index.js';
 
 // --- Interfaces ---
 
@@ -196,6 +197,47 @@ export function buildDiscussionSystemPrompt(
   return lines.join('\n');
 }
 
+export function buildRedBlueSystemPrompt(
+  participant: DebateParticipant,
+  projectContext?: string,
+  participants?: DebateParticipant[],
+): string {
+  const self = participant.label;
+  const provider = providerLabel(participant.provider);
+  const otherParticipants = buildOtherParticipantSummary(participant, participants);
+  const rolePrompt = buildParticipantRolePrompt(participant.role);
+
+  const lines = [
+    `You are ${self}, participating in a structured red-team / blue-team design review with ${otherParticipants}.`,
+    `Your underlying model/provider is ${provider}.`,
+    '',
+    rolePrompt,
+    '',
+    'Your goal is to pressure-test the design, then help the group converge on the strongest practical recommendation.',
+    '',
+    'Rules:',
+    '1. In challenge moments, surface the sharpest risks, weak assumptions, and failure modes.',
+    '2. In defense moments, harden the best viable option with concrete mitigations and trade-offs.',
+    '3. Always tie criticism back to a better decision, not criticism for its own sake.',
+    '4. Name what is settled, what is still contested, and what still needs verification.',
+    '5. Prefer design direction, decision criteria, and implementation implications over abstract commentary.',
+    '6. Be concise but thorough. Aim for 250-450 words per response.',
+    '7. Use a professional, respectful tone.',
+    '8. Respond in the same language as the question.',
+    '9. Stay inside your assigned role. Do not collapse into a generic neutral answer.',
+  ];
+  const researchGuidance = buildProviderResearchGuidance(participant.provider);
+  if (researchGuidance.length > 0) {
+    lines.push('', ...researchGuidance);
+  }
+
+  if (projectContext) {
+    lines.push('', '---', '', projectContext);
+  }
+
+  return lines.join('\n');
+}
+
 export function buildOpeningPrompt(question: string): string {
   return [
     'A user has asked the following question for debate:',
@@ -239,6 +281,20 @@ export function buildDiscussionOpeningPrompt(question: string): string {
   ].join('\n');
 }
 
+export function buildRedBlueOpeningPrompt(question: string): string {
+  return [
+    'A group is running a red-team / blue-team design review for the following question:',
+    '',
+    `"${question}"`,
+    '',
+    'For this opening round, act like a red team and stress-test the decision space. Include:',
+    '1. The candidate assumptions, options, or design directions that should be challenged first',
+    '2. The biggest failure modes, blind spots, or attack surfaces',
+    '3. The decision criteria the group must use to avoid a weak recommendation',
+    '4. What the blue side will need to prove or mitigate in later rounds',
+  ].join('\n');
+}
+
 export function buildDiscussionRebuttalPrompt(
   opponentProvider: ParticipantName,
   opponentResponse: string,
@@ -256,6 +312,26 @@ export function buildDiscussionRebuttalPrompt(
     '2. Clarifying where you differ and why',
     '3. Refining the emerging recommendation with your own perspective',
     '4. Naming unresolved questions, decision criteria, or next steps',
+  ].join('\n');
+}
+
+export function buildRedBlueRebuttalPrompt(
+  opponentProvider: ParticipantName,
+  opponentResponse: string,
+): string {
+  const opponent = participantLabel(opponentProvider);
+  return [
+    `${opponent} has added the following red/blue review input:`,
+    '',
+    '---',
+    opponentResponse,
+    '---',
+    '',
+    'Please continue the review by:',
+    '1. Acknowledging the strongest valid challenge or safeguard they raised',
+    '2. Defending, refining, or replacing the most viable option with concrete reasoning',
+    '3. Converting criticism into explicit design mitigations, decision criteria, or implementation constraints',
+    '4. Naming what is now settled, what is still contested, and what still needs verification',
   ].join('\n');
 }
 
@@ -359,10 +435,110 @@ export function buildDiscussionSynthesisPrompt(
   ].join('\n');
 }
 
+export function buildRedBlueSynthesisPrompt(
+  question: string,
+  debateLog: Array<{ label: ParticipantName; round: number; content: string }>,
+  roundStates: DebateRoundState[] = [],
+): string {
+  const transcript = debateLog
+    .map(
+      (entry) =>
+        `[Round ${entry.round} - ${participantLabel(entry.label)}]\n${entry.content}`,
+    )
+    .join('\n\n---\n\n');
+
+  const hasUser = debateLog.some((entry) => entry.label === 'user');
+  const designParticipants = [...new Set(debateLog.filter((entry) => entry.label !== 'user').map((entry) => entry.label))];
+  const providerLabels = designParticipants.map((entry) => participantLabel(entry as ParticipantName)).join(', ');
+  const participants = hasUser ? `${providerLabels}, and the User` : providerLabels;
+  const roundStateSection = roundStates.length > 0
+    ? [
+        'Compressed Decision Board:',
+        '',
+        buildRoundStateSummaryPreamble(roundStates),
+        '',
+      ]
+    : [];
+
+  return [
+    `You are a technical design referee synthesizing a red-team / blue-team review between ${participants}.`,
+    '',
+    `Design Question: "${question}"`,
+    '',
+    ...roundStateSection,
+    'Review Transcript:',
+    '',
+    transcript,
+    '',
+    'Produce an ADR-style design recommendation with these sections:',
+    '',
+    '## Decision Summary',
+    'One short paragraph stating the recommended direction.',
+    '',
+    '## Problem Context',
+    'The problem, constraints, and why a decision is needed now.',
+    '',
+    '## Decision Board Snapshot',
+    'What is settled, what remains contested, and what still needs verification.',
+    '',
+    '## Alternatives Considered',
+    'List the main options and summarize their pros, cons, and trade-offs.',
+    '',
+    '## Selected Option',
+    'State the chosen option clearly.',
+    '',
+    '## Decision Rationale',
+    'Explain why this option wins given the trade-offs and evidence.',
+    '',
+    '## Implementation Strategy',
+    'Describe the practical rollout order, safeguards, and validation steps.',
+    '',
+    '## Open Risks',
+    'Call out remaining risks, unknowns, or follow-up checks.',
+    '',
+    'Respond in the same language as the original question.',
+  ].join('\n');
+}
+
+export function buildPlainLanguageRewritePrompt(
+  question: string,
+  synthesis: string,
+  mode: DebateMode = 'debate',
+): string {
+  const subject = getDebateModeDefinition(mode).artifact.plainLanguageLabel;
+
+  return [
+    `You are rewriting a ${subject} so it is easier for a non-expert to understand.`,
+    '',
+    `Original Question: "${question}"`,
+    '',
+    'Original conclusion:',
+    synthesis,
+    '',
+    'Rewrite requirements:',
+    '- Keep the same meaning, recommendation, and caveats.',
+    '- Do not add new facts, assumptions, or examples.',
+    '- Use the same language as the original question and conclusion.',
+    '- Prefer short sentences and concrete wording.',
+    '- If a technical term is necessary, explain it briefly in context.',
+    '- Keep only the minimum structure needed for clarity.',
+    '- Output only the rewritten conclusion.',
+  ].join('\n');
+}
+
 export function buildDiscussionRoundTaskPrompt(): string {
   return [
     'Using the compressed discussion state above, move the conversation forward.',
     'Clarify the most important unresolved trade-offs, build on valid agreements, and propose concrete next steps.',
+    'Use the latest participant responses and any explicit user guidance as higher-priority context than older rounds.',
+    'Avoid repeating settled points unless you are correcting them.',
+  ].join('\n');
+}
+
+export function buildRedBlueRoundTaskPrompt(): string {
+  return [
+    'Using the compressed decision board above, move the design toward a stronger recommendation.',
+    'Push at least one contested item toward settled or needs-verification, and turn criticism into a better design constraint or mitigation.',
     'Use the latest participant responses and any explicit user guidance as higher-priority context than older rounds.',
     'Avoid repeating settled points unless you are correcting them.',
   ].join('\n');
@@ -392,12 +568,12 @@ export function buildRoundStatePrompt(
     '',
     'Return plain text using exactly these sections:',
     'SUMMARY: one concise paragraph',
-    'ISSUES:',
+    'ISSUES: contested items on the decision board',
     '- unresolved issue 1',
     '- unresolved issue 2',
-    'AGREEMENTS:',
+    'AGREEMENTS: settled items on the decision board',
     '- agreement 1',
-    'NEXT_FOCUS:',
+    'NEXT_FOCUS: items that still need verification in the next round',
     '- what the next round should focus on',
     'STOP_SUGGESTED: yes|no',
     'STOP_REASON: brief reason, or "none"',
@@ -411,8 +587,8 @@ export function buildRoundStatePrompt(
 
 export function buildRoundStateContextSection(states: DebateRoundState[]): string {
   const lines = [
-    '## Debate State So Far',
-    'Use this compressed state as the primary context. Avoid repeating settled points.',
+    '## Decision Board So Far',
+    'Use this compressed state as the primary context. Treat it as the running decision board and avoid repeating settled points.',
     '',
   ];
 
@@ -756,6 +932,13 @@ export const DISCUSSION_PROMPTS: PromptBuilders = {
   roundTaskPrompt: buildDiscussionRoundTaskPrompt,
 };
 
+export const RED_BLUE_PROMPTS: PromptBuilders = {
+  systemPrompt: buildRedBlueSystemPrompt,
+  openingPrompt: buildRedBlueOpeningPrompt,
+  rebuttalPrompt: buildRedBlueRebuttalPrompt,
+  roundTaskPrompt: buildRedBlueRoundTaskPrompt,
+};
+
 export const PLAN_PROMPTS: PromptBuilders = {
   systemPrompt: buildPlanSystemPrompt,
   openingPrompt: buildPlanOpeningPrompt,
@@ -764,12 +947,14 @@ export const PLAN_PROMPTS: PromptBuilders = {
 
 export function getPromptBuilders(mode: DebateMode): PromptBuilders {
   if (mode === 'plan') return PLAN_PROMPTS;
+  if (mode === 'red-blue') return RED_BLUE_PROMPTS;
   if (mode === 'discussion') return DISCUSSION_PROMPTS;
   return DEBATE_PROMPTS;
 }
 
 export function getSynthesisPromptBuilder(mode: DebateMode): SynthesisPromptBuilder {
   if (mode === 'plan') return buildPlanSynthesisPrompt;
+  if (mode === 'red-blue') return buildRedBlueSynthesisPrompt;
   if (mode === 'discussion') return buildDiscussionSynthesisPrompt;
   return buildSynthesisPrompt;
 }
@@ -784,13 +969,13 @@ function buildRoundStateSummaryPreamble(roundStates: DebateRoundState[]): string
   for (const state of roundStates) {
     lines.push(`[Round ${state.round}] ${state.summary}`);
     if (state.keyIssues.length > 0) {
-      lines.push(`Issues: ${state.keyIssues.join(' | ')}`);
+      lines.push(`Contested: ${state.keyIssues.join(' | ')}`);
     }
     if (state.agreements.length > 0) {
-      lines.push(`Agreements: ${state.agreements.join(' | ')}`);
+      lines.push(`Settled: ${state.agreements.join(' | ')}`);
     }
     if (state.nextFocus.length > 0) {
-      lines.push(`Next focus: ${state.nextFocus.join(' | ')}`);
+      lines.push(`Needs verification: ${state.nextFocus.join(' | ')}`);
     }
     if (state.shouldSuggestStop) {
       lines.push(`Stop suggestion: yes${state.stopReason ? ` (${state.stopReason})` : ''}`);

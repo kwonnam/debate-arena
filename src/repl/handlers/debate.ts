@@ -15,13 +15,19 @@ import { Applier } from '../../core/applier.js';
 import { getApplyPromptBuilder, type ApplyPromptBuilder } from '../../core/prompt-builder.js';
 import { loadConfig } from '../../config/manager.js';
 import { showQuestion } from '../../ui/banner.js';
-import { createPrettyCallbacks, createSilentCallbacks, renderResult, buildMarkdownContent } from '../../ui/renderer.js';
+import {
+  createPrettyCallbacks,
+  createSilentCallbacks,
+  renderResult,
+  buildMarkdownContent,
+  renderSimplifiedSynthesis,
+} from '../../ui/renderer.js';
 import { writeToken, endStream } from '../../ui/streamer.js';
 import { collectProjectContext } from '../../core/project-context.js';
 import { withSafeStdin } from '../tty-state.js';
 import type { SessionState } from '../session.js';
 
-type DebateModeArg = 'debate' | 'plan' | 'interactive';
+type DebateModeArg = DebateMode | 'interactive';
 type GitStatusCode = string;
 
 interface GitSnapshot {
@@ -155,12 +161,18 @@ export async function handleDebate(
   const format = session.format;
   const isPretty = format === 'pretty';
 
-  const mode: DebateMode = modeArg === 'plan' ? 'plan' : 'debate';
+  const mode: DebateMode = modeArg === 'interactive' ? 'debate' : modeArg;
   const isInteractive = modeArg === 'interactive';
 
   if (isPretty) {
     if (mode === 'plan') {
       console.log(chalk.bold.blue('\n  Mode: Implementation Planning\n'));
+    }
+    if (mode === 'red-blue') {
+      console.log(chalk.bold.red('\n  Mode: Red/Blue Design Review\n'));
+    }
+    if (mode === 'discussion') {
+      console.log(chalk.bold.green('\n  Mode: Collaborative Discussion\n'));
     }
     if (isInteractive) {
       console.log(chalk.bold.cyan('\n  Mode: Interactive 3-Way Debate (You + Codex + Claude)\n'));
@@ -242,6 +254,7 @@ export async function handleDebate(
     if (format !== 'pretty') {
       renderResult(result, format);
     } else {
+      renderSimplifiedSynthesis(result);
       console.log('\nDebate complete.\n');
     }
 

@@ -1,0 +1,76 @@
+{
+  "id": "6a1045fd0ed1",
+  "kind": "news",
+  "query": "엔비디아를 지금 매수해도 될까?",
+  "collectedAt": "2026-03-17T14:31:47.061Z",
+  "sources": [
+    "Brave Search"
+  ],
+  "articles": [
+    {
+      "title": "[엔비디아 GTC 2026] 'AI 추론 칩' 공개로 주가 반등 시동 걸리나 - 글로벌이코노믹",
+      "source": "Unknown",
+      "url": "https://www.g-enews.com/article/Global-Biz/2026/03/202603141824552533fbbec65dfb_1",
+      "publishedAt": "3 days ago",
+      "summary": "AI 패러다임의 변곡점에 엔비디아가 섰다.전 세계 AI 가속기 시장의 80% 이상을 장악한 엔비디아(NVIDIA)가 새로운 전장에 직면했다. AI 연산의 무게중심이 모델을 '만드는' 훈련(Training)에서 만들어진 모델을 '굴리는' 추론(Inf...",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "엔비디아(NVDA.N) GTC 2026, 관전 포인트..한국 기업 존재 역대급 By 알파경제 alphabiz",
+      "source": "Unknown",
+      "url": "https://kr.investing.com/news/stock-market-news/article-1864322",
+      "publishedAt": "2 days ago",
+      "summary": "엔비디아(NVDA.N) GTC 2026, 관전 포인트..한국 기업 존재 역대급",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "엔비디아 AI 통신 비전 나온다...광통신주 ‘들썩’",
+      "source": "Unknown",
+      "url": "https://www.google.com/goto?url=CAESWwE7q4ylDovnbUFQijBHjqrQSXdZURyy7pnm05Kqq9lBkkrx7ujMlayyjggUN33YCbmJbpb02_l1RHK9I5cjncm-w4J-PtikJuDkuag6kpfS3lejmW7SzzL2cFc%3D",
+      "publishedAt": "5 days ago",
+      "summary": "[한국경제TV 고영욱 기자] 엔비디아 연례개발자 회의 GTC 2026을 앞두고 통신장비주들이 주목 받고 있습니다. 특히 AI 데이터 처리 효율을 높이기 위한 방법으로 광통신이 부상하면서 관련 기업들이 강세를 보이고 있습니다.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "골드만삭스, 엔비디아에 대한 '낙관적 전망' 유지···추가 상승 여력 30% 제시 - Benzinga Korea 한국",
+      "source": "Unknown",
+      "url": "https://kr.benzinga.com/news/usa/analystratings/%EA%B3%A8%EB%93%9C%EB%A7%8C%EC%82%AD%EC%8A%A4-%EC%97%94%EB%B9%84%EB%94%94%EC%95%84%EC%97%90-%EB%8C%80%ED%95%9C-%EB%82%99%EA%B4%80%EC%A0%81-%EC%A0%84%EB%A7%9D-%EC%9C%A0%EC%A7%80/",
+      "publishedAt": "3 weeks ago",
+      "summary": "골드만삭스는 엔비디아(NASDAQ:NVDA)의 분기 실적이 폭발적으로 증가한 후, AI 칩 거대 기업이 앞으로 몇 달 동안 시장 평균을 상회할 “더 명확한 길”을 확보했다고 평가하며 투자의견을 다시 한 번 강조했다.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "바클레이즈 \"엔비디아 매수 기회…AI 투자 정점 아냐\"",
+      "source": "Unknown",
+      "url": "https://news.einfomax.co.kr/news/articleView.html?idxno=4403787",
+      "publishedAt": "2 days ago",
+      "summary": "글로벌 투자은행 바클레이즈는 아직 인공지능(AI) 투자가 정점에 도달하지 않았다면서, 엔비디아(NAS:NVDA) 주식을 저가 매수해야 한다고 밝혔다.14일(현지시간) CNBC에 따르면 바클레이즈의 톰 오말리 애널리스트는 보고서에서 ...",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "12화 엔비디아 실적 발표, 투자자가 진짜 주목할 것들",
+      "source": "Unknown",
+      "url": "https://brunch.co.kr/@po-kun/77",
+      "publishedAt": "3 weeks ago",
+      "summary": "2026년 2월 26일 새벽, 엔비디아 실적 발표를 앞두고 읽어야 할 글 | 1.엔비디아 실적 발표가 중요한가요? 한국 시간으로 2026년 2월 26일 목요일 새벽 6~7시 경, 엔비디아가 2025년 4분기 실적을 발표합니다.",
+      "relevanceScore": 0.8
+    }
+  ],
+  "excludedCount": 0,
+  "searchPlan": {
+    "detectedLanguage": "ko",
+    "llmApplied": true,
+    "queries": [
+      {
+        "query": "엔비디아 매수 타이밍 판단 기준",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "NVDA stock buy timing analysis news",
+        "language": "en",
+        "source": "expanded"
+      }
+    ]
+  }
+}

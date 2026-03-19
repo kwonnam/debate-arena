@@ -277,7 +277,7 @@ da
 ```
 ╔═══════════════════════════════════════╗
 ║                                       ║
-║             FIGHT FOR ME              ║
+║            DEBATE ARENA               ║
 ║   AI Debate Arena - Codex vs Claude   ║
 ║                                       ║
 ╚═══════════════════════════════════════╝
@@ -362,8 +362,11 @@ The dashboard now supports:
 
 ```bash
 da
+da --repl
 da > /dashboard
 ```
+
+`da` now starts the dashboard by default. Use `da --repl` to open the terminal REPL directly, or `/dashboard` from inside the REPL if you want to start the server later.
 
 Open the printed URL (default: `http://localhost:3847`).
 
@@ -429,8 +432,8 @@ da "Impact of AI on jobs" --news --news-quiet
 da "Latest Bun package manager changes" --web --web-quiet
 
 # Reuse a previously saved snapshot
-da "Follow-up question" --news-snapshot ./ffm-snapshots/snap-abc123.json
-da "Follow-up question" --web-snapshot ./ffm-snapshots/snap-def456.json
+da "Follow-up question" --news-snapshot ./debate-arena-snapshots/snap-abc123.json
+da "Follow-up question" --web-snapshot ./debate-arena-snapshots/snap-def456.json
 ```
 
 ### Collect evidence inside REPL
@@ -633,7 +636,7 @@ Notes:
 - For this project, set `baseUrl` to `https://ollama.com` (the runtime appends `/v1/...`).
 - Ollama Cloud recommends `apiKeyEnvVar: "OLLAMA_API_KEY"` and cloud models from `https://ollama.com/search?c=cloud&o=newest`.
 - Load priority for v2 config:
-  1. `FFM_CONFIG_V2` (if set)
+  1. `DEBATE_ARENA_CONFIG_V2` (if set, legacy `FFM_CONFIG_V2` also works)
   2. `./config.v2.json` (current directory)
   3. `~/.debate-arena/config.v2.json`
 - Dashboard provider dropdowns refresh automatically from this file.

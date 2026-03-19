@@ -57,7 +57,7 @@ function initNonTTY(): void {
 }
 
 function readNonTTY(): Promise<PromptResult> {
-  stdout.write('ffm > ');
+  stdout.write('da > ');
   initNonTTY();
 
   return new Promise<PromptResult>((resolve) => {

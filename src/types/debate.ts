@@ -11,7 +11,7 @@ export type OutputFormat = 'pretty' | 'json' | 'markdown';
 
 export type JudgeOption = ProviderName | 'both';
 
-export type DebateMode = 'debate' | 'discussion' | 'plan';
+export type DebateMode = 'debate' | 'discussion' | 'red-blue' | 'plan';
 
 export type NewsMode = 'unified' | 'split';
 
@@ -96,6 +96,7 @@ export interface DebateResult {
   messages: DebateMessage[];
   roundStates: DebateRoundState[];
   synthesis: string | null;
+  simplifiedSynthesis: string | null;
   rounds: number;
   mode: DebateMode;
 }

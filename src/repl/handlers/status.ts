@@ -17,7 +17,7 @@ function renderProviderStatus(status: ProviderStatus): void {
 }
 
 export function handleStatus(): void {
-  console.log(chalk.bold('\n  FIGHT FOR ME — Agent Status\n'));
+  console.log(chalk.bold('\n  DEBATE ARENA — Agent Status\n'));
 
   const providers = checkAllProviders();
   for (const provider of providers) {

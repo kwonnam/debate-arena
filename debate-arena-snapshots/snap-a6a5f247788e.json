@@ -1,0 +1,76 @@
+{
+  "id": "a6a5f247788e",
+  "kind": "news",
+  "query": "오늘 하이닉스 오전 주가흐름을 알려줘",
+  "collectedAt": "2026-03-17T23:45:37.617Z",
+  "sources": [
+    "Brave Search"
+  ],
+  "articles": [
+    {
+      "title": "400만 삼전·하닉 개미들 ‘고점 공포’에… 증권가 “상승 여력 여전히 충분”",
+      "source": "Unknown",
+      "url": "https://www.chosun.com/economy/money/2026/03/15/RSHK4XE4SRG6VARKYOXOE7PO2Q/",
+      "publishedAt": "3 days ago",
+      "summary": "400만 삼전·하닉 개미들 고점 공포에 증권가 상승 여력 여전히 충분 미국과 이란 간 군사 충돌 여파로 글로벌 금융시장이 크게 흔들리면서 국내 증시도 롤러코스터 장세를 이어가고 있다. 특히 그동안 증시 상승을 이끌던 ...",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "젠슨황 호재마저 격추시킨 이란드론…하이닉스 오히려 뒷걸음질 - 매일경제",
+      "source": "Unknown",
+      "url": "https://mk.co.kr/news/stock/11990977",
+      "publishedAt": "2 hours ago",
+      "summary": "엔비디아GTC發 호재에 장초반 질주 이라크 美대사관 공격에 상승분 반납 최태원 하이닉스 ADR 상장 검토 언급",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "삼전·하이닉스 뚝뚝 떨어지는데…놀라운 전망 나왔다 | 한국경제",
+      "source": "Unknown",
+      "url": "https://www.hankyung.com/article/2026031397616",
+      "publishedAt": "4 days ago",
+      "summary": "삼전·하이닉스 뚝뚝 떨어지는데…'놀라운 전망' 나왔다 [종목+], 삼전·하이닉스 이달 15%·14% 하락 美·이란 전쟁 속 차익 실현 매물 풀려 증권가 \"AI발 호황 지속…실적 견고\"",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "[오늘증시] 삼전·현대차 올랐지만 하이닉스 막판 약세 전환 By Sidae 시대",
+      "source": "Unknown",
+      "url": "https://kr.investing.com/news/stock-market-news/article-1866441",
+      "publishedAt": "16 hours ago",
+      "summary": "[오늘증시] 삼전·현대차 올랐지만 하이닉스 막판 약세 전환",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "“아직 늦지 않았다고?” 삼성전자·SK하이닉스 주가 급등…더 담으라는 증권가 [투자360] - 헤럴드경제",
+      "source": "Unknown",
+      "url": "https://biz.heraldcorp.com/article/10695938",
+      "publishedAt": "1 day ago",
+      "summary": "17일 한국거래소에 따르면 반도체 호황을 기반으로 한 실적 모멘텀이 죽지 않으면서 지정학적 불확실성을 딛고 삼성전자와 SK하이닉스 주가가 상승하고 있으며 엔비디아가",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "SK하이닉스 주가, 3월 17일 장중 994,000원 2.05% 상승 | 신나리 기자 | 톱스타뉴스",
+      "source": "Unknown",
+      "url": "https://www.topstarnews.net/news/articleView.html?idxno=16007154",
+      "publishedAt": "1 day ago",
+      "summary": "17일 오전 10시 6분 기준, 네이버페이 증권에 따르면 SK하이닉스 주가는 지난 종가 대비 2.05% 상승한 994,000원을 기록하고 있다.",
+      "relevanceScore": 0.8
+    }
+  ],
+  "excludedCount": 0,
+  "searchPlan": {
+    "detectedLanguage": "ko",
+    "llmApplied": true,
+    "queries": [
+      {
+        "query": "하이닉스 오전 주가 흐름 오늘",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "SK hynix stock price morning trend today",
+        "language": "en",
+        "source": "expanded"
+      }
+    ]
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "id": "97c089412e8f",
+  "kind": "news",
+  "query": "이번주 하이닉스 주가는 어떨까?",
+  "collectedAt": "2026-03-18T04:18:29.873Z",
+  "sources": [
+    "Brave Search"
+  ],
+  "articles": [
+    {
+      "title": "SK Hynix Enters KRW 185 Trillion Operating Profit Era Driven by AI [Stock of the Week] - The Asia Business Daily",
+      "source": "Unknown",
+      "url": "https://www.asiae.co.kr/en/article/2026031616184106384",
+      "publishedAt": "5 hours ago",
+      "summary": "Under the weekly spotlight, dubbed ... every week. SK Hynix Headquarters. Photo by Yonhap News Agency View original image · Despite a temporary drop in its stock price due to recent geopolitical risks, SK Hynix is seeing a flood of record-breaking earnings forecasts. This is underpinned ...",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Chip stocks wobble, but analysts raise targets for Samsung, SK hynix - The Korea Herald",
+      "source": "Unknown",
+      "url": "https://www.koreaherald.com/article/10695323",
+      "publishedAt": "2 days ago",
+      "summary": "Goldman Sachs also lifted its operating profit forecast for Samsung Electronics this year to 23.9 trillion won from 18.1 trillion won, citing rising prices for commodity DRAM and NAND memory. It projected that the chipmaker’s return on equity could reach around 37 percent, approaching a record high. The bank also raised its target price for SK hynix ...",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Samsung, SK Hynix Correct; Analysts Forecast Growth",
+      "source": "Unknown",
+      "url": "https://www.chosun.com/english/market-money-en/2026/03/15/YKYWIJQYUJHQJBZXNXA23OBRW4/",
+      "publishedAt": "3 days ago",
+      "summary": "Samsung, SK Hynix Correct; Analysts Forecast Growth Geopolitical tensions, oil surge spark volatility; analysts cite memory price gains, AI demand for",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "SK Hynix Average Salary Hits Record $134,000 Amid AI Boom - Seoul Economic Daily",
+      "source": "Unknown",
+      "url": "https://en.sedaily.com/finance/2026/03/17/sk-hynix-average-salary-hits-record-134000-amid-ai-boom",
+      "publishedAt": "19 hours ago",
+      "summary": "SK Hynix employees saw their compensation surge as the semiconductor industry thrived on expanding artificial intelligence demand. Average annual salary reached",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "SK Hynix Stock Climbs 2% as Chairman Predicts Memory Shortage Through 2030 - Blockonomi",
+      "source": "Unknown",
+      "url": "https://blockonomi.com/sk-hynix-stock-climbs-2-as-chairman-predicts-memory-shortage-through-2030/",
+      "publishedAt": "17 hours ago",
+      "summary": "SK Hynix stock gained 2% after Chairman Chey Tae-won forecasted the memory chip shortage will extend to 2030 driven by AI wafer demand.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "SK Hynix Stock Up 2% After Chair Says Memory Crunch Won't End Until 2030 - CoinCentral",
+      "source": "Unknown",
+      "url": "https://coincentral.com/sk-hynix-stock-up-2-after-chair-says-memory-crunch-wont-end-until-2030/",
+      "publishedAt": "17 hours ago",
+      "summary": "SK Hynix stock rose 2% after the chairman said the global memory chip shortage could last until 2030 due to AI wafer demand.",
+      "relevanceScore": 0.8
+    }
+  ],
+  "excludedCount": 0,
+  "searchPlan": {
+    "detectedLanguage": "ko",
+    "llmApplied": true,
+    "queries": [
+      {
+        "query": "하이닉스 주가 예측 이번주",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "하이닉스 주식 호재 악재 2024",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "SK hynix stock price forecast this week",
+        "language": "en",
+        "source": "expanded"
+      }
+    ]
+  }
+}

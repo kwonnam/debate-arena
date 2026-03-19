@@ -76,6 +76,7 @@ export interface SynthesisReadyEvent extends DebateEventBase {
     status: 'started' | 'completed'
     judge: string
     content?: string
+    simplifiedContent?: string
   }
 }
 

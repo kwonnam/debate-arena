@@ -1,0 +1,81 @@
+{
+  "id": "c48a11c5f421",
+  "kind": "news",
+  "query": "오늘 미국 주식흐름이 어떨까?",
+  "collectedAt": "2026-03-19T13:32:06.711Z",
+  "sources": [
+    "Brave Search"
+  ],
+  "articles": [
+    {
+      "title": "오늘 S&P 500 index의 최근 가치 하락의 배경은 무엇입니까?",
+      "source": "Unknown",
+      "url": "https://tradersunion.com/ko/news/financial-news/show/1731928-sandp-500-slides-1-06percent-today/",
+      "publishedAt": "18 hours ago",
+      "summary": "S&P 500는 오늘 1.06% 하락하여 $6,644.99를 기록했으며, 장기 지지선 위를 유지하고 있음에도 불구하고 기술적 압박을 받고 있습니다.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "오늘 마이크론 실적 발표: 어떤 결과가 MU 주가를 움직일까 | EBC Financial Group",
+      "source": "Unknown",
+      "url": "https://www.ebc.com/kr/forex/289256.html",
+      "publishedAt": "1 day ago",
+      "summary": "마이크론이 오늘 실적을 발표하며 MU 주가는 사상 최고치 근처에 있습니다. 주요 수치, 가이던스 신호, HBM 추세, 옵션이 암시하는 움직임을 정리했습니다.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Visa 주가는 매도세가 우세하고 하락 변동성이 확대되면서 3.01% 하락했습니다.",
+      "source": "Unknown",
+      "url": "https://tradersunion.com/ko/news/financial-news/show/1732627-visa-drops-3-01percent-today-to/",
+      "publishedAt": "18 hours ago",
+      "summary": "Visa는 오늘 $299.18에 거래되고 있으며, 3.01% 하락했습니다. 가격은 여전히 하락 압력 아래에 있으며, 반등 신호가 없어 추가 하락 위험을 시사합니다.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "오늘 미국 연준 회의: 파월과 점도표에서 무엇을 봐야 하나 | EBC Financial Group",
+      "source": "Unknown",
+      "url": "https://www.ebc.com/kr/forex/289192.html",
+      "publishedAt": "1 day ago",
+      "summary": "연준은 오늘 3월 18일 결정을 발표합니다. 파월의 발언과 닷 플롯이 초점입니다. 금리, 전망치 및 시장 반응에서 예상되는 사항은 다음과 같습니다.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "오늘의 미국 주식 시장: 고착화되는 인플레이션으로 금리 인하 희망이 커지면서 S&P 500 선물 상승 - Simply Wall St News",
+      "source": "Unknown",
+      "url": "https://simplywall.st/ko/stocks/us/software/nasdaq-adbe/adobe/news/0a3a9c2f92603f6d",
+      "publishedAt": "3 days ago",
+      "summary": "모닝 불 - 미국 증시 모닝 업데이트 2026년 3월 16일 월요일 오늘 아침 미국 주식 선물은 투자자들이 여전히 탄력적인 소비에 비해 완고한 인플레이션에 무게를 두면서 S&P 500과 나스닥에 연동된 계약이 약 0.4% 상승하는 등 ...",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "주식 투자 전략 | 안정적으로 수익 내는 방법",
+      "source": "Unknown",
+      "url": "https://stock1.brokdam.com/%EC%A3%BC%EC%8B%9D-%ED%88%AC%EC%9E%90-%EC%A0%84%EB%9E%B5-%EC%95%88%EC%A0%95%EC%A0%81%EC%9C%BC%EB%A1%9C-%EC%88%98%EC%9D%B5-%EB%82%B4%EB%8A%94-%EB%B0%A9%EB%B2%95/",
+      "publishedAt": "1 day ago",
+      "summary": "급등 종목에 흔들리지 않고 수익 내는 주식 투자 전략 5가지. 분산 투자·장기 투자·배당주·ETF·자산관리 전략을 구체적으로 정리했습니다. 2026년 시장 전망 포함.",
+      "relevanceScore": 0.8
+    }
+  ],
+  "excludedCount": 0,
+  "searchPlan": {
+    "detectedLanguage": "ko",
+    "llmApplied": true,
+    "queries": [
+      {
+        "query": "오늘 미 주식 시장 흐름",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "미국 주식 오늘 동향",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "US stock market today trend",
+        "language": "en",
+        "source": "expanded"
+      }
+    ]
+  }
+}

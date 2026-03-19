@@ -6,6 +6,7 @@ import type {
 } from '../types/debate.js';
 import type { DebateParticipant } from '../types/roles.js';
 import { endStream, writeToken } from './streamer.js';
+import { getDebateModeDefinition } from '../core/modes/index.js';
 
 type Style = { color: typeof chalk; label: string };
 
@@ -66,6 +67,37 @@ function debateParticipantStyle(participant: DebateParticipant): Style {
 
 function ruleLine(): string {
   return '-'.repeat(50);
+}
+
+function getSynthesisTitles(mode: DebateResult['mode']): {
+  synthesisTitle: string;
+  simplifiedTitle: string;
+} {
+  if (mode === 'red-blue') {
+    return {
+      synthesisTitle: 'Design Recommendation',
+      simplifiedTitle: 'Plain-language Recommendation',
+    };
+  }
+
+  if (mode === 'plan') {
+    return {
+      synthesisTitle: 'Agreed Plan',
+      simplifiedTitle: 'Plain-language Plan',
+    };
+  }
+
+  if (mode === 'discussion') {
+    return {
+      synthesisTitle: 'Discussion Memo',
+      simplifiedTitle: 'Plain-language Memo',
+    };
+  }
+
+  return {
+    synthesisTitle: 'Final Synthesis',
+    simplifiedTitle: 'Plain-language Answer',
+  };
 }
 
 export function renderUserTurnStart(): void {
@@ -153,35 +185,49 @@ export function renderJsonResult(result: DebateResult): void {
   console.log(JSON.stringify(result, null, 2));
 }
 
-export function buildMarkdownContent(result: DebateResult): string {
-  const title = result.mode === 'plan'
-    ? 'Implementation Plan'
-    : result.mode === 'discussion'
-      ? 'Discussion'
-      : 'Debate';
-  const synthesisTitle = result.mode === 'plan'
-    ? 'Agreed Plan'
-    : result.mode === 'discussion'
-      ? 'Discussion Memo'
-      : 'Final Synthesis';
+export function renderSimplifiedSynthesis(result: DebateResult): void {
+  if (!result.simplifiedSynthesis || result.simplifiedSynthesis === result.synthesis) {
+    return;
+  }
 
-  let md = `# ${title}: ${result.question}\n\n`;
+  const { simplifiedTitle } = getSynthesisTitles(result.mode);
+  console.log(chalk.bold.yellow(`\n${ruleLine()}\n  ${simplifiedTitle}\n${ruleLine()}`));
+  console.log(chalk.white(`\n${result.simplifiedSynthesis}\n`));
+}
+
+export function buildMarkdownContent(result: DebateResult): string {
+  const modeDefinition = getDebateModeDefinition(result.mode);
+  const { synthesisTitle, simplifiedTitle } = getSynthesisTitles(result.mode);
+
+  let md = `# ${modeDefinition.label}: ${result.question}\n\n`;
 
   for (const msg of result.messages) {
     const label = participantStyle(msg.label).label;
-    const phase = msg.phase === 'opening' ? 'Opening' : 'Rebuttal';
+    const phase = msg.phase === 'opening'
+      ? modeDefinition.openingLabel
+      : modeDefinition.rebuttalLabel;
     md += `## Round ${msg.round} - ${label} (${phase})\n\n${msg.content}\n\n---\n\n`;
   }
 
   for (const state of result.roundStates) {
-    md += `## Round ${state.round} State\n\n${state.summary}\n\n`;
+    md += `## Round ${state.round} ${modeDefinition.roundStateLabel}\n\n${state.summary}\n\n`;
     if (state.keyIssues.length > 0) {
-      md += `Key issues:\n${state.keyIssues.map((item) => `- ${item}`).join('\n')}\n\n`;
+      md += `Contested:\n${state.keyIssues.map((item) => `- ${item}`).join('\n')}\n\n`;
+    }
+    if (state.agreements.length > 0) {
+      md += `Settled:\n${state.agreements.map((item) => `- ${item}`).join('\n')}\n\n`;
+    }
+    if (state.nextFocus.length > 0) {
+      md += `Needs verification:\n${state.nextFocus.map((item) => `- ${item}`).join('\n')}\n\n`;
     }
     if (state.transcriptFallbackUsed) {
       md += `_Transcript fallback used._\n\n`;
     }
     md += '---\n\n';
+  }
+
+  if (result.simplifiedSynthesis && result.simplifiedSynthesis !== result.synthesis) {
+    md += `## ${simplifiedTitle}\n\n${result.simplifiedSynthesis}\n\n`;
   }
 
   if (result.synthesis) {

@@ -81,6 +81,42 @@ export function summarizeSnapshot(snapshot: EvidenceSnapshot): EvidenceSnapshotS
   };
 }
 
+export function createCuratedSnapshot(
+  snapshot: EvidenceSnapshot,
+  articleUrls: string[],
+  queryOverride?: string,
+): EvidenceSnapshot {
+  const normalizedKind = normalizeEvidenceKind(snapshot.kind);
+  const selectedUrlSet = new Set(
+    articleUrls
+      .map((url) => String(url || '').trim())
+      .filter(Boolean),
+  );
+  const selectedArticles = snapshot.articles.filter((article) => selectedUrlSet.has(String(article.url || '').trim()));
+
+  if (selectedArticles.length === 0) {
+    throw new Error('At least one article must be selected to create a curated snapshot.');
+  }
+
+  const nextQuery = queryOverride?.trim()
+    || `${snapshot.query} [selected ${selectedArticles.length}/${snapshot.articles.length}]`;
+  const nextSources = Array.from(new Set([
+    ...(Array.isArray(snapshot.sources) ? snapshot.sources.map((source) => String(source)).filter(Boolean) : []),
+    'manual-selection',
+  ]));
+
+  return {
+    ...snapshot,
+    id: createSnapshotId(nextQuery, selectedArticles.map((article) => article.url), normalizedKind),
+    kind: normalizedKind,
+    query: nextQuery,
+    collectedAt: new Date().toISOString(),
+    sources: nextSources,
+    articles: selectedArticles,
+    excludedCount: Math.max(0, Number(snapshot.excludedCount) || 0) + Math.max(0, snapshot.articles.length - selectedArticles.length),
+  };
+}
+
 export function normalizeEvidenceKind(kind?: string): EvidenceKind {
   return kind === 'web' ? 'web' : 'news';
 }

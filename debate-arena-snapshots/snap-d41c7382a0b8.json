@@ -1,0 +1,86 @@
+{
+  "id": "d41c7382a0b8",
+  "kind": "news",
+  "query": "삼성전자 4월 실적 예상은?",
+  "collectedAt": "2026-03-17T22:53:45.822Z",
+  "sources": [
+    "Brave Search"
+  ],
+  "articles": [
+    {
+      "title": "Samsung shares rise after Nvidia's Huang flags tie-up on new AI chips | Reuters",
+      "source": "Unknown",
+      "url": "https://reuters.com/world/asia-pacific/samsung-elec-showcases-nvidias-new-inference-chip-made-using-4-nanometer-process-2026-03-16",
+      "publishedAt": "1 day ago",
+      "summary": "Shares of Samsung Electronics rose as much ​as 5% on Tuesday after Nvidia CEO Jensen Huang said ‌the South Korean company was producing Nvidia's new artificial intelligence chips.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Samsung Electronics Announces Earnings Guidance for Fourth Quarter 2025 – Samsung Global Newsroom",
+      "source": "Unknown",
+      "url": "https://news.samsung.com/global/samsung-electronics-announces-earnings-guidance-for-fourth-quarter-2025",
+      "publishedAt": "January 7, 2026",
+      "summary": "Samsung Electronics today announced its earnings guidance for the fourth quarter of 2025.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Samsung strike plan risks chip supply disruption, says union chief - The Economic Times",
+      "source": "Unknown",
+      "url": "https://m.economictimes.com/news/international/business/samsung-strike-plan-risks-chip-supply-disruption-says-union-chief/amp_articleshow/129621978.cms",
+      "publishedAt": "1 day ago",
+      "summary": "Samsung Electronics' biggest union is threatening to halt chip production. Workers are voting on a strike planned for May. This could impact global semiconductor supplies. Union members are demanding better pay and bonuses. They feel gains from the booming chip industry are not reaching them.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Samsung stock rises: can Nvidia revive its struggling foundry?",
+      "source": "Unknown",
+      "url": "https://invezz.com/news/2026/03/17/samsung-stock-rises-can-nvidia-revive-its-struggling-foundry",
+      "publishedAt": "15 hours ago",
+      "summary": "Samsung Electronics shares rose sharply on Tuesday after fresh signals from Nvidia strengthened expectations of a turnaround in its chipmaking business.",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Samsung Stock Price Prediction: 2026, 2027, 2030 - Benzinga",
+      "source": "Unknown",
+      "url": "https://www.benzinga.com/money/samsung-stock-price-prediction",
+      "publishedAt": "1 day ago",
+      "summary": "Samsung is a major firm in several exciting areas, such as semiconductors, smartphones and consumer electronics. What do the next five years have in store for this tech giant?",
+      "relevanceScore": 0.8
+    },
+    {
+      "title": "Samsung’s entire memory chip output through 2027 expected to sell out: analyst By Investing.com",
+      "source": "Unknown",
+      "url": "https://ng.investing.com/news/stock-market-news/samsungs-entire-memory-chip-output-through-2027-expected-to-sell-out-analyst-2389446",
+      "publishedAt": "5 days ago",
+      "summary": "Samsung’s entire memory chip output through 2027 expected to sell out: analyst",
+      "relevanceScore": 0.8
+    }
+  ],
+  "excludedCount": 0,
+  "searchPlan": {
+    "detectedLanguage": "ko",
+    "llmApplied": true,
+    "queries": [
+      {
+        "query": "삼성전자 4월 실적 예상",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "Samsung Electronics April earnings forecast",
+        "language": "en",
+        "source": "expanded"
+      },
+      {
+        "query": "삼성전자 분기 실적 전망",
+        "language": "ko",
+        "source": "expanded"
+      },
+      {
+        "query": "Samsung Q2 earnings guidance",
+        "language": "en",
+        "source": "expanded"
+      }
+    ]
+  }
+}

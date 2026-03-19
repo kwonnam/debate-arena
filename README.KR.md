@@ -276,7 +276,7 @@ da
 ```
 ╔═══════════════════════════════════════╗
 ║                                       ║
-║             FIGHT FOR ME              ║
+║            DEBATE ARENA               ║
 ║   AI Debate Arena - Codex vs Claude   ║
 ║                                       ║
 ╚═══════════════════════════════════════╝
@@ -379,8 +379,8 @@ da "AI가 일자리에 미치는 영향" --news --news-quiet
 da "Bun 최신 변경 사항" --web --web-quiet
 
 # 이전에 저장한 스냅샷 재사용
-da "후속 질문" --news-snapshot ./ffm-snapshots/snap-abc123.json
-da "후속 질문" --web-snapshot ./ffm-snapshots/snap-def456.json
+da "후속 질문" --news-snapshot ./debate-arena-snapshots/snap-abc123.json
+da "후속 질문" --web-snapshot ./debate-arena-snapshots/snap-def456.json
 ```
 
 ### REPL에서 근거 수집
@@ -413,6 +413,13 @@ da > 연준이 금리를 내릴까?
 
 ### 대시보드 워크벤치
 
+```bash
+da
+da --repl
+```
+
+기본 실행은 이제 dashboard입니다. 예전처럼 터미널 REPL을 바로 열고 싶으면 `da --repl`을 사용하세요.
+
 대시보드는 하나의 화면에 모든 기능을 섞지 않고, 허브와 두 개의 워크플로우 페이지로 나뉩니다.
 
 - `/` : 허브 페이지
@@ -428,15 +435,15 @@ da > 연준이 금리를 내릴까?
 
 ### 역할 템플릿과 YAML 설정
 
-대시보드의 참가자는 고정 `participantA/B`가 아니라 **2~3인 역할 템플릿**으로 구성됩니다.
+대시보드의 참가자는 고정 `participantA/B`가 아니라 **2~6인 역할 템플릿**으로 구성됩니다.
 
 - 뉴스 토론: 경제, 시장, 정책, 법률 같은 역할 프리셋
-- 프로젝트·기획: UX, 백엔드, 아키텍트, QA, 제품 전략, 사용자 문제, MVP 같은 역할 프리셋
+- 프로젝트·기획: UX, 디자이너, 백엔드, 아키텍트, QA, 제품 전략, 사용자 문제, MVP 같은 역할 프리셋
 - 같은 모델을 여러 역할에 반복 배치할 수 있음
 
 역할 템플릿은 다음 순서로 로드됩니다.
 
-1. `FFM_ROLE_CONFIG`
+1. `DEBATE_ARENA_ROLE_CONFIG` (레거시 `FFM_ROLE_CONFIG`도 계속 지원)
 2. `./debate-roles.yaml`
 3. `~/.debate-arena/debate-roles.yaml`
 
@@ -611,7 +618,7 @@ da config set defaultJudge both
 - Ollama Cloud는 일반적으로 `apiKeyEnvVar: "OLLAMA_API_KEY"` 사용을 권장합니다.
 - 최신 클라우드 모델 목록: `https://ollama.com/search?c=cloud&o=newest`
 - v2 설정 로드 우선순위:
-  1. `FFM_CONFIG_V2` (설정된 경우)
+  1. `DEBATE_ARENA_CONFIG_V2` (설정된 경우, 레거시 `FFM_CONFIG_V2`도 지원)
   2. `./config.v2.json` (현재 디렉터리)
   3. `~/.debate-arena/config.v2.json`
 - 대시보드 provider 드롭다운은 이 파일 기준으로 동적으로 갱신됩니다.

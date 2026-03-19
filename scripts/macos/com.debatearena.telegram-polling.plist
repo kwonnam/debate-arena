@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.debatearena.telegram-polling</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/namkwon/IdeaProjects/debate-arena/scripts/run_telegram_polling.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/namkwon/IdeaProjects/debate-arena</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/namkwon/IdeaProjects/debate-arena/output/telegram/launchd-out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/namkwon/IdeaProjects/debate-arena/output/telegram/launchd-err.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/Users/namkwon/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

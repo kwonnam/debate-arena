@@ -3,8 +3,10 @@ import { parseCliArgs } from '../src/repl/cli-args.js';
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  const replOnly = argv.includes('--repl');
+  const normalizedArgv = argv.filter((arg) => arg !== '--repl');
 
-  if (shouldStartDashboard(argv)) {
+  if (shouldStartDashboard(normalizedArgv, replOnly)) {
     const { startDashboardServer, stopDashboardRuntime } = await import('../src/server/index.js');
     const { url } = startDashboardServer();
 
@@ -24,11 +26,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const cliArgs = parseCliArgs(argv);
+  const cliArgs = parseCliArgs(normalizedArgv);
   await startRepl(cliArgs);
 }
 
-function shouldStartDashboard(argv: string[]): boolean {
+function shouldStartDashboard(argv: string[], replOnly: boolean): boolean {
+  if (replOnly) return false;
+  if (argv.length === 0) return true;
   return argv.includes('--dashboard') || argv.includes('--server') || argv.includes('--serve');
 }
 

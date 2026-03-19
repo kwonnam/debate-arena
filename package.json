@@ -1,12 +1,12 @@
 {
   "name": "debate-arena",
   "version": "0.5.2",
-  "description": "AI Debate CLI - Codex vs Claude multi-round debates via local CLIs",
+  "description": "Multi-model debate and discussion workbench with a local dashboard",
   "type": "module",
   "bin": {
     "debate-arena": "./dist/bin/cli.js",
     "da": "./dist/bin/cli.js",
-    "ffm": "./dist/bin/cli.js"
+    "debate-arena-telegram": "./dist/bin/telegram.js"
   },
   "files": [
     "dist",
@@ -18,6 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node dist/bin/cli.js",
+    "telegram:poll": "node dist/bin/telegram.js",
     "package:local": "npm run build && mkdir -p .release && npm pack --pack-destination .release",
     "prepublishOnly": "npm run build"
   },

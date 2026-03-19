@@ -1,8 +1,7 @@
 import type { DebateMode } from '../types/debate.js';
 
 export type ParsedCommand =
-  | { kind: 'debate'; topic: string; mode: 'debate' }
-  | { kind: 'debate'; topic: string; mode: 'plan' }
+  | { kind: 'debate'; topic: string; mode: DebateMode }
   | { kind: 'debate'; topic: string; mode: 'interactive' }
   | { kind: 'slash'; command: string; args: string }
   | { kind: 'empty' };

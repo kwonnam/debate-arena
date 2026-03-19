@@ -43,7 +43,7 @@ export function InputPrompt({ debateMode, onSubmit, onSlash, onInterrupt, onEof,
 
   return (
     <Box>
-      <Text bold color="yellow">ffm</Text>
+      <Text bold color="yellow">da</Text>
       <Text color={modeColor}>{` [${modeLabel}]`}</Text>
       <Text dimColor>{' > '}</Text>
       <TextInput

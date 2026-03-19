@@ -29,7 +29,7 @@ describe('DebateOrchestrator', () => {
       name: 'codex',
       generate: vi.fn(async (messages: Message[]) => {
         const prompt = messages.map((message) => message.content).join('\n\n');
-        return prompt.includes('## Debate State So Far')
+        return prompt.includes('## Decision Board So Far')
           ? 'Codex rebuttal'
           : 'Codex opening';
       }),
@@ -61,16 +61,23 @@ describe('DebateOrchestrator', () => {
           return 'Balanced synthesis';
         }
 
-        return prompt.includes('## Debate State So Far')
+        return prompt.includes('## Decision Board So Far')
           ? 'Claude rebuttal'
           : 'Claude opening';
       }),
       stream: vi.fn(emptyStream),
     };
 
+    const minimax: any = {
+      name: 'ollama-cloud-minimax-m2-7',
+      generate: vi.fn(async () => '쉽게 말하면 REST가 운영은 쉽고, GraphQL은 유연성이 강하다.'),
+      stream: vi.fn(emptyStream),
+    };
+
     const orchestrator = new DebateOrchestrator(new Map([
       ['codex', codex],
       ['claude', claude],
+      ['ollama-cloud-minimax-m2-7', minimax],
     ]));
 
     const result = await orchestrator.run({
@@ -84,6 +91,7 @@ describe('DebateOrchestrator', () => {
 
     expect(result.roundStates).toHaveLength(2);
     expect(result.synthesis).toBe('Balanced synthesis');
+    expect(result.simplifiedSynthesis).toBe('쉽게 말하면 REST가 운영은 쉽고, GraphQL은 유연성이 강하다.');
     expect(sawCompressedRoundStates).toBe(true);
 
     const claudeOpeningPrompt = claude.generate.mock.calls[0][0]
@@ -98,7 +106,7 @@ describe('DebateOrchestrator', () => {
       .map((message: Message) => message.content)
       .join('\n');
 
-    expect(codexRebuttalPrompt).toContain('## Debate State So Far');
+    expect(codexRebuttalPrompt).toContain('## Decision Board So Far');
   });
 
   it('병렬 opening 스트림은 provider별 완성 본문으로만 flush한다', async () => {
@@ -211,7 +219,7 @@ describe('DebateOrchestrator', () => {
       name: 'codex',
       generate: vi.fn(async (messages: Message[]) => {
         const prompt = messages.map((message) => message.content).join('\n\n');
-        return prompt.includes('## Debate State So Far') ? 'Codex rebuttal' : 'Codex opening';
+        return prompt.includes('## Decision Board So Far') ? 'Codex rebuttal' : 'Codex opening';
       }),
       stream: vi.fn(emptyStream),
     };
@@ -233,7 +241,7 @@ describe('DebateOrchestrator', () => {
             'STOP_REASON: none',
           ].join('\n');
         }
-        return prompt.includes('## Debate State So Far') ? 'Claude rebuttal' : 'Claude opening';
+        return prompt.includes('## Decision Board So Far') ? 'Claude rebuttal' : 'Claude opening';
       }),
       stream: vi.fn(emptyStream),
     };
@@ -273,7 +281,7 @@ describe('DebateOrchestrator', () => {
       name: 'codex',
       generate: vi.fn(async (messages: Message[]) => {
         const prompt = messages.map((message) => message.content).join('\n\n');
-        return prompt.includes('## Debate State So Far') ? 'Codex resumed rebuttal' : 'Codex opening';
+        return prompt.includes('## Decision Board So Far') ? 'Codex resumed rebuttal' : 'Codex opening';
       }),
       stream: vi.fn(emptyStream),
     };
@@ -295,7 +303,7 @@ describe('DebateOrchestrator', () => {
             'STOP_REASON: none',
           ].join('\n');
         }
-        return prompt.includes('## Debate State So Far') ? 'Claude resumed rebuttal' : 'Claude opening';
+        return prompt.includes('## Decision Board So Far') ? 'Claude resumed rebuttal' : 'Claude opening';
       }),
       stream: vi.fn(emptyStream),
     };
@@ -390,6 +398,12 @@ describe('DebateOrchestrator', () => {
       stream: vi.fn(emptyStream),
     };
 
+    const minimax: any = {
+      name: 'ollama-cloud-minimax-m2-7',
+      generate: vi.fn(async () => '쉽게 말하면 상황에 따라 둘 다 가능하지만 지금은 REST가 더 무난하다.'),
+      stream: vi.fn(emptyStream),
+    };
+
     const callbacks = createCallbacks();
     callbacks.onRoundStart = (round) => {
       roundStarts.push(round);
@@ -399,6 +413,7 @@ describe('DebateOrchestrator', () => {
       new Map([
         ['codex', codex],
         ['claude', claude],
+        ['ollama-cloud-minimax-m2-7', minimax],
       ]),
       undefined,
       (event) => events.push(event),
@@ -473,10 +488,12 @@ describe('DebateOrchestrator', () => {
     expect(roundStarts).toEqual([]);
     expect(result.messages).toHaveLength(4);
     expect(result.synthesis).toBe('Recovered synthesis');
+    expect(result.simplifiedSynthesis).toBe('쉽게 말하면 상황에 따라 둘 다 가능하지만 지금은 REST가 더 무난하다.');
 
     const synthesisEvents = events.filter((event) => event.type === 'synthesis_ready');
     expect(synthesisEvents).toHaveLength(2);
     expect(synthesisEvents[0].payload.status).toBe('started');
     expect(synthesisEvents[1].payload.status).toBe('completed');
+    expect(synthesisEvents[1].payload.simplifiedContent).toBe('쉽게 말하면 상황에 따라 둘 다 가능하지만 지금은 REST가 더 무난하다.');
   });
 });

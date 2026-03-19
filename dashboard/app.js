@@ -38,6 +38,20 @@ const roundFill = document.getElementById('round-fill');
 const gapBanner = document.getElementById('gap-banner');
 const typingIndicator = document.getElementById('typing-indicator');
 const participantLanes = document.getElementById('participant-lanes');
+const runtimeActions = document.getElementById('runtime-actions');
+const runtimeSessionTools = document.getElementById('runtime-session-tools');
+const runtimeReplayTools = document.getElementById('runtime-replay-tools');
+const runtimeExportTools = document.getElementById('runtime-export-tools');
+const replayLabel = replayInput?.closest('.runtime-label') || null;
+
+const workspaceStagePill = document.getElementById('workspace-stage-pill');
+const workspaceStageFocus = document.getElementById('workspace-stage-focus');
+const workspaceStageTitle = document.getElementById('workspace-stage-title');
+const workspaceStageDescription = document.getElementById('workspace-stage-description');
+const workspaceStageSummary = document.getElementById('workspace-stage-summary');
+const workspacePrimaryAction = document.getElementById('workspace-primary-action');
+const workspaceSecondaryAction = document.getElementById('workspace-secondary-action');
+const workspaceStageSteps = Array.from(document.querySelectorAll('[data-stage-step]'));
 
 const projectForm = document.getElementById('project-form');
 const projectQuestionInput = projectForm?.querySelector('[name="question"]');
@@ -177,6 +191,7 @@ let stalledTimer = null;
 let followUpRequestInFlight = false;
 
 const SYNTHESIS_PLACEHOLDER = 'Synthesizing...';
+const WORKSPACE_STAGE_ORDER = ['ready', 'running', 'done'];
 const MAX_FOLLOW_UP_SUGGESTIONS = 6;
 const MAX_FILES = 6;
 const MAX_TEXT_FILE_CHARS = 12_000;
@@ -198,7 +213,7 @@ function getEvidenceKindMeta(kind) {
       label: '웹',
       itemLabel: '웹 근거',
       itemListLabel: '웹 근거 목록',
-      workflowLabel: '웹 근거 토론',
+      workflowLabel: '웹 분석',
       collectingLabel: '웹 근거를 수집하는 중입니다...',
       collectFailedLabel: '웹 근거 수집에 실패했습니다.',
       selectedLabel: '선택된 웹 근거 팩이 없습니다.',
@@ -216,7 +231,7 @@ function getEvidenceKindMeta(kind) {
     label: '뉴스',
     itemLabel: '뉴스 근거',
     itemListLabel: '기사 목록',
-    workflowLabel: '뉴스 근거 토론',
+    workflowLabel: '이슈 분석',
     collectingLabel: '뉴스를 수집하는 중입니다...',
     collectFailedLabel: '뉴스 수집에 실패했습니다.',
     selectedLabel: '선택된 뉴스 근거 팩이 없습니다.',
@@ -389,6 +404,8 @@ function setConnState(state) {
     clearTimeout(stalledTimer);
     stalledTimer = null;
   }
+
+  updateWorkspaceStageUI();
 }
 
 function startStalledTimer() {
@@ -667,6 +684,7 @@ function renderProjectIdeaPreview() {
       <strong>자동 질문 미리보기</strong>
       <p>기획 캔버스를 채우면 자동 생성되는 토론 질문이 여기에 표시됩니다.</p>
     `;
+    updateWorkspaceStageUI();
     return;
   }
 
@@ -675,6 +693,7 @@ function renderProjectIdeaPreview() {
     <strong>자동 질문 미리보기</strong>
     <p>${escapeHtml(buildProjectIdeaQuestion(values))}</p>
   `;
+  updateWorkspaceStageUI();
 }
 
 function canProjectUseOllama() {
@@ -704,15 +723,15 @@ function getWorkflowMeta(workflowKind, evidenceKind) {
       ? 'news'
       : undefined;
   if (normalizedEvidenceKind === 'web') {
-    return { label: '웹 근거 토론', className: 'workflow-web' };
+    return { label: '웹 분석', className: 'workflow-web' };
   }
 
   if (workflowKind === 'news' || normalizedEvidenceKind === 'news') {
-    return { label: '뉴스 근거 토론', className: 'workflow-news' };
+    return { label: '이슈 분석', className: 'workflow-news' };
   }
 
   if (workflowKind === 'project') {
-    return { label: '프로젝트·기획', className: 'workflow-project' };
+    return { label: '프로젝트 설계', className: 'workflow-project' };
   }
 
   return { label: '일반 토론', className: 'workflow-general' };
@@ -725,11 +744,25 @@ function getModeMeta(mode) {
       title: 'Implementation Plan',
       processLabel: 'Planning Process',
       conclusionLabel: 'Agreed Plan',
-      roundStateLabel: 'Planning State',
+      roundStateLabel: 'Decision Board',
       openingLabel: 'Initial plan',
       rebuttalLabel: 'Review',
       filePrefix: 'plan',
       sessionWord: '계획',
+    };
+  }
+
+  if (mode === 'red-blue') {
+    return {
+      label: 'Red/Blue',
+      title: 'Red/Blue Design Review',
+      processLabel: 'Red/Blue Review',
+      conclusionLabel: 'Design Recommendation',
+      roundStateLabel: 'Decision Board',
+      openingLabel: 'Red challenge',
+      rebuttalLabel: 'Blue defense',
+      filePrefix: 'red-blue',
+      sessionWord: '설계 검토',
     };
   }
 
@@ -739,7 +772,7 @@ function getModeMeta(mode) {
       title: 'Discussion',
       processLabel: 'Discussion Process',
       conclusionLabel: 'Discussion Memo',
-      roundStateLabel: 'Discussion State',
+      roundStateLabel: 'Decision Board',
       openingLabel: 'Initial contribution',
       rebuttalLabel: 'Follow-up',
       filePrefix: 'discussion',
@@ -752,7 +785,7 @@ function getModeMeta(mode) {
     title: 'Debate',
     processLabel: 'Debate Process',
     conclusionLabel: 'Final Conclusion',
-    roundStateLabel: 'Round State',
+    roundStateLabel: 'Decision Board',
     openingLabel: 'Opening',
     rebuttalLabel: 'Rebuttal',
     filePrefix: 'debate',
@@ -769,6 +802,14 @@ function statusToClass(status) {
   return String(status || '').toUpperCase();
 }
 
+function isRunningSessionStatus(status) {
+  const normalized = String(status || '').toUpperCase();
+  return normalized === 'RUNNING'
+    || normalized === 'STREAMING'
+    || normalized === 'SYNTHESIZING'
+    || normalized === 'ROUND_COMPLETE';
+}
+
 function canResumeSession(session) {
   const status = String(session?.status || '').toUpperCase();
   return status === 'FAILED' || status === 'CANCELLED';
@@ -777,6 +818,240 @@ function canResumeSession(session) {
 function canContinueSession(session) {
   const status = String(session?.status || '').toUpperCase();
   return status === 'COMPLETED';
+}
+
+function getWorkspacePrimaryFormHref() {
+  return pageWorkflow === 'news' ? '#news-form' : '#project-form';
+}
+
+function getWorkspaceSessionListHref() {
+  return pageWorkflow === 'news' ? '#snapshot-list' : '#session-list';
+}
+
+function getActiveSessionStatus() {
+  return String(activeSessionSummary?.status || '').toUpperCase();
+}
+
+function getWorkspaceStage() {
+  const status = getActiveSessionStatus();
+
+  if (status === 'COMPLETED') {
+    return 'done';
+  }
+
+  if (isRunningSessionStatus(status)) {
+    return 'running';
+  }
+
+  if (activeSessionId && synthesisContent && synthesisContent !== SYNTHESIS_PLACEHOLDER) {
+    return 'done';
+  }
+
+  if (
+    activeSessionId
+    && !isTerminalSessionStatus(status)
+    && (connState === 'connecting' || connState === 'live' || connState === 'reconnecting')
+  ) {
+    return 'running';
+  }
+
+  return 'ready';
+}
+
+function toPlainTextSnippet(value, maxLength = 220) {
+  const normalized = String(value || '')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/[`*_>#-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+}
+
+function getWorkspaceStageSummary(stage) {
+  if (stage === 'done' && synthesisContent && synthesisContent !== SYNTHESIS_PLACEHOLDER) {
+    return toPlainTextSnippet(synthesisContent, 260);
+  }
+
+  if (latestRoundState?.summary) {
+    return toPlainTextSnippet(latestRoundState.summary, 240);
+  }
+
+  if (activeSessionSummary?.question) {
+    return activeSessionSummary.question;
+  }
+
+  if (pageWorkflow === 'news') {
+    if (selectedSnapshotId) {
+      return `선택된 근거 팩 ${selectedSnapshotId}가 준비되어 있습니다. 질문을 확인한 뒤 바로 분석을 시작할 수 있습니다.`;
+    }
+
+    const draftedQuestion = String(newsQuestionInput?.value || newsQueryInput?.value || '').trim();
+    if (draftedQuestion) {
+      return `현재 초안: ${draftedQuestion}`;
+    }
+
+    return '질문과 탐색어를 정리하면 이 영역이 현재 분석 상태와 핵심 요약 중심으로 바뀝니다.';
+  }
+
+  const draftedQuestion = String(projectQuestionInput?.value || '').trim();
+  if (draftedQuestion) {
+    return `현재 초안: ${draftedQuestion}`;
+  }
+
+  return '질문이나 템플릿을 고르면 이 영역이 실행 상태와 현재 요약 중심으로 바뀝니다.';
+}
+
+function getWorkspaceStageContent(stage) {
+  const isNewsWorkflow = pageWorkflow === 'news';
+  const readyQuestionLabel = isNewsWorkflow ? '질문과 근거를 정리한 뒤 세션을 시작하세요' : '질문과 템플릿을 정리한 뒤 세션을 시작하세요';
+  const readyQuestionDescription = isNewsWorkflow
+    ? '첫 화면에서는 질문, 탐색어, 근거 연결을 빠르게 판단하고, 세부 도구는 실행 이후에 필요한 만큼만 보이게 구성했습니다.'
+    : '첫 화면에서는 질문, 템플릿, 실행만 빠르게 판단하고, 고급 설정과 세션 도구는 필요할 때만 보이도록 구성했습니다.';
+
+  if (stage === 'running') {
+    return {
+      pill: '실행 중',
+      focus: isNewsWorkflow ? '핵심 쟁점과 연결된 근거를 먼저 보세요' : '핵심 쟁점과 참여자 비교를 먼저 보세요',
+      title: isNewsWorkflow ? '분석이 진행 중입니다' : '토론이 진행 중입니다',
+      description: isNewsWorkflow
+        ? '지금은 핵심 쟁점 보드와 연결된 근거 팩을 먼저 확인하고, 세부 진행은 아래에서 필요할 때만 펼쳐 보세요.'
+        : '지금은 핵심 쟁점 보드와 참여자 비교를 먼저 확인하고, 세부 진행은 아래에서 필요할 때만 펼쳐 보세요.',
+      primaryLabel: latestRoundState ? '핵심 쟁점 보기' : '실시간 토론 보기',
+      primaryHref: latestRoundState ? '#decision-board' : '#stream',
+      secondaryLabel: isNewsWorkflow ? '연결 근거 보기' : '세부 진행 보기',
+      secondaryHref: isNewsWorkflow ? '#evidence-pack' : '#timeline',
+    };
+  }
+
+  if (stage === 'done') {
+    return {
+      pill: '완료',
+      focus: '최종 권고와 다음 액션을 확인하세요',
+      title: isNewsWorkflow ? '최종 분석 결과가 준비되었습니다' : '최종 권고가 준비되었습니다',
+      description: isNewsWorkflow
+        ? '완료 상태에서는 최종 권고와 연결 근거를 먼저 보고, 필요하면 후속 분석 주제를 이어서 시작할 수 있습니다.'
+        : '완료 상태에서는 최종 권고와 다음 액션을 먼저 보고, 필요하면 후속 토의로 자연스럽게 이어갈 수 있습니다.',
+      primaryLabel: '최종 권고 보기',
+      primaryHref: '#synthesis-section',
+      secondaryLabel: '다음 액션 보기',
+      secondaryHref: '#follow-up-section',
+    };
+  }
+
+  if (canResumeSession(activeSessionSummary)) {
+    return {
+      pill: '시작 전',
+      focus: '멈춘 세션을 이어가거나 새 질문으로 다시 시작하세요',
+      title: '멈춘 세션을 복구하거나 질문을 다시 정리할 수 있습니다',
+      description: '실패하거나 취소된 세션은 재시작할 수 있고, 질문 흐름을 손봐 새 세션으로 전환할 수도 있습니다.',
+      primaryLabel: '실행 상태 보기',
+      primaryHref: '#session-brief',
+      secondaryLabel: isNewsWorkflow ? '질문 다시 정리' : '질문 다시 정리',
+      secondaryHref: getWorkspacePrimaryFormHref(),
+    };
+  }
+
+  return {
+    pill: '시작 전',
+    focus: isNewsWorkflow ? '질문과 근거를 먼저 준비하세요' : '질문을 먼저 정리하세요',
+    title: readyQuestionLabel,
+    description: readyQuestionDescription,
+    primaryLabel: isNewsWorkflow ? '근거 준비하기' : '질문 준비하기',
+    primaryHref: getWorkspacePrimaryFormHref(),
+    secondaryLabel: isNewsWorkflow ? '근거 라이브러리 보기' : '최근 세션 보기',
+    secondaryHref: getWorkspaceSessionListHref(),
+  };
+}
+
+function setElementHidden(element, hidden) {
+  if (!element) return;
+  element.hidden = hidden;
+}
+
+function updateRuntimeActionVisibility() {
+  const status = getActiveSessionStatus();
+  const stage = getWorkspaceStage();
+  const hasActiveSession = Boolean(activeSessionSummary);
+  const hasRunningSessions = cachedSessions.some((session) => isRunningSessionStatus(session?.status));
+  const showStopSession = stage === 'running';
+  const showResume = canResumeSession(activeSessionSummary);
+  const showContinue = canContinueSession(activeSessionSummary);
+  const showReplay = hasActiveSession;
+  const showExport = status === 'COMPLETED';
+  const showStopTeam = hasRunningSessions || stage === 'running';
+
+  setElementHidden(stopSessionButton, !showStopSession);
+  setElementHidden(resumeSessionButton, !showResume);
+  setElementHidden(continueSessionButton, !showContinue);
+  setElementHidden(stopTeamButton, !showStopTeam);
+  setElementHidden(replayLabel, !showReplay);
+  setElementHidden(replayButton, !showReplay);
+  setElementHidden(exportMarkdownButton, !showExport);
+  setElementHidden(exportObsidianButton, !showExport);
+  setElementHidden(exportSlidesButton, !showExport);
+
+  const sessionToolsVisible = showStopSession || showResume || showContinue || showStopTeam;
+  const replayToolsVisible = showReplay;
+  const exportToolsVisible = showExport;
+
+  setElementHidden(runtimeSessionTools, !sessionToolsVisible);
+  setElementHidden(runtimeReplayTools, !replayToolsVisible);
+  setElementHidden(runtimeExportTools, !exportToolsVisible);
+  setElementHidden(runtimeActions, !sessionToolsVisible && !replayToolsVisible && !exportToolsVisible);
+}
+
+function updateWorkspaceStageUI() {
+  if (pageWorkflow === 'settings') {
+    return;
+  }
+
+  const stage = getWorkspaceStage();
+  document.body.dataset.workspaceStage = stage;
+  updateRuntimeActionVisibility();
+
+  if (!workspaceStagePill) {
+    return;
+  }
+
+  const content = getWorkspaceStageContent(stage);
+  const currentIndex = WORKSPACE_STAGE_ORDER.indexOf(stage);
+
+  workspaceStagePill.textContent = content.pill;
+  if (workspaceStageFocus) {
+    workspaceStageFocus.textContent = content.focus;
+  }
+  if (workspaceStageTitle) {
+    workspaceStageTitle.textContent = content.title;
+  }
+  if (workspaceStageDescription) {
+    workspaceStageDescription.textContent = content.description;
+  }
+  if (workspaceStageSummary) {
+    workspaceStageSummary.textContent = getWorkspaceStageSummary(stage);
+  }
+  if (workspacePrimaryAction) {
+    workspacePrimaryAction.textContent = content.primaryLabel;
+    workspacePrimaryAction.setAttribute('href', content.primaryHref);
+  }
+  if (workspaceSecondaryAction) {
+    workspaceSecondaryAction.textContent = content.secondaryLabel;
+    workspaceSecondaryAction.setAttribute('href', content.secondaryHref);
+  }
+
+  workspaceStageSteps.forEach((step) => {
+    const stepIndex = WORKSPACE_STAGE_ORDER.indexOf(step.getAttribute('data-stage-step') || '');
+    step.classList.toggle('is-active', stepIndex === currentIndex);
+    step.classList.toggle('is-complete', stepIndex >= 0 && stepIndex < currentIndex);
+  });
 }
 
 function getFollowUpTopicPlaceholder() {
@@ -1431,7 +1706,7 @@ function renderBubbles() {
   if (!streamBox) return;
 
   if (bubbleMessages.length === 0) {
-    streamBox.innerHTML = '<div class="stream-empty">토론이 시작되면 여기에서 실시간으로 관찰할 수 있습니다.</div>';
+    streamBox.innerHTML = '<div class="stream-empty">실행이 시작되면 여기에서 참여자 비교와 토론 원문을 확인할 수 있습니다.</div>';
     return;
   }
 
@@ -1456,7 +1731,7 @@ function renderTimeline() {
   if (!timelineBox) return;
 
   if (timelineEntries.length === 0) {
-    timelineBox.innerHTML = '<div class="timeline-entry">이벤트가 아직 없습니다.</div>';
+    timelineBox.innerHTML = '<div class="timeline-entry">세부 진행 이벤트가 아직 없습니다.</div>';
     return;
   }
 
@@ -1484,6 +1759,7 @@ function renderSynthesis() {
   if (!synthesisContent) {
     synthesisSection.style.display = 'none';
     renderFollowUpComposer();
+    updateWorkspaceStageUI();
     return;
   }
 
@@ -1492,12 +1768,13 @@ function renderSynthesis() {
   if (synthesisContent === SYNTHESIS_PLACEHOLDER) {
     synthesisBox.innerHTML = '<div class="markdown-body"><p><em>최종 결론을 정리하는 중입니다...</em></p></div>';
     renderFollowUpComposer();
+    updateWorkspaceStageUI();
     return;
   }
 
   synthesisBox.innerHTML = `<div class="markdown-body">${markdownToHtml(synthesisContent)}</div>`;
   renderFollowUpComposer();
-
+  updateWorkspaceStageUI();
 }
 
 function renderListMarkup(items, emptyText) {
@@ -1607,8 +1884,9 @@ function renderDecisionBoard() {
 
   if (!displayedRoundState) {
     decisionBoard.className = 'decision-board empty';
-    decisionBoard.innerHTML = '라운드가 끝나면 핵심 보드가 이곳에 표시됩니다.';
+    decisionBoard.innerHTML = '라운드가 끝나면 Decision Board가 이곳에 표시됩니다.';
     renderRoundHistory();
+    updateWorkspaceStageUI();
     return;
   }
 
@@ -1628,21 +1906,22 @@ function renderDecisionBoard() {
     </div>
     <div class="decision-board-grid">
       <div class="decision-board-card">
-        <h4>핵심 쟁점</h4>
-        ${renderListMarkup(displayedRoundState.keyIssues, '핵심 쟁점이 없습니다.')}
+        <h4>확정</h4>
+        ${renderListMarkup(displayedRoundState.agreements, '아직 확정된 항목이 없습니다.')}
       </div>
       <div class="decision-board-card">
-        <h4>합의된 부분</h4>
-        ${renderListMarkup(displayedRoundState.agreements, '아직 합의가 없습니다.')}
+        <h4>경합 중</h4>
+        ${renderListMarkup(displayedRoundState.keyIssues, '현재 경합 중인 항목이 없습니다.')}
       </div>
       <div class="decision-board-card">
-        <h4>다음 포커스</h4>
-        ${renderListMarkup(displayedRoundState.nextFocus, '다음 포커스가 없습니다.')}
+        <h4>검증 필요</h4>
+        ${renderListMarkup(displayedRoundState.nextFocus, '추가 검증이 필요한 항목이 없습니다.')}
       </div>
     </div>
     ${warning}
   `;
   renderRoundHistory();
+  updateWorkspaceStageUI();
 }
 
 function getWorkflowProviderOptions(workflow) {
@@ -2307,7 +2586,7 @@ function renderRoleConfigPreviewMarkup(config) {
 
       return `
         <section class="role-config-preview-section">
-          <h3>${workflow === 'project' ? '프로젝트·기획' : '근거 기반 토론'}</h3>
+          <h3>${workflow === 'project' ? '프로젝트 설계' : '이슈 분석'}</h3>
           ${templates.map((template) => `
             <article class="role-config-preview-card">
               <strong>${escapeHtml(template.label)}</strong>
@@ -2579,9 +2858,10 @@ function renderSessionBrief() {
     sessionBrief.innerHTML = `
       <div class="empty-state">
         <strong>선택된 세션이 없습니다.</strong>
-        <p>프로젝트·기획 또는 근거 기반 토론을 시작하거나, 아래 세션을 선택하세요.</p>
+        <p>${pageWorkflow === 'news' ? '질문과 근거를 준비해 분석을 시작하거나, 아래 세션을 선택하세요.' : '질문을 정리해 설계를 시작하거나, 아래 세션을 선택하세요.'}</p>
       </div>
     `;
+    updateWorkspaceStageUI();
     return;
   }
 
@@ -2627,6 +2907,7 @@ function renderSessionBrief() {
       </div>
     </div>
   `;
+  updateWorkspaceStageUI();
 }
 
 function renderSnapshotSummary(title, summary, buttons = '') {
@@ -2664,6 +2945,7 @@ function renderSelectedEvidence() {
     const evidenceMeta = getEvidenceKindMeta(getSelectedNewsEvidenceKind());
     selectedEvidence.className = 'selected-evidence-card empty';
     selectedEvidence.innerHTML = `<div class="selected-evidence-empty">${escapeHtml(evidenceMeta.selectedLabel)} ${escapeHtml(evidenceMeta.workflowLabel)} 시작 시 자동 수집하거나, 아래 라이브러리에서 선택할 수 있습니다.</div>`;
+    updateWorkspaceStageUI();
     return;
   }
 
@@ -2689,6 +2971,7 @@ function renderSelectedEvidence() {
   selectedEvidence.querySelector('[data-action="clear-selected"]')?.addEventListener('click', () => {
     clearSelectedSnapshot();
   });
+  updateWorkspaceStageUI();
 }
 
 function renderEvidencePackItems(detail) {
@@ -2905,23 +3188,125 @@ async function viewSnapshot(snapshotId) {
     return;
   }
 
-  modalBody.innerHTML = detail.articles
-    .map((article) => {
-      const title = article.url
-        ? `<a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(article.title || article.url)}</a>`
-        : escapeHtml(article.title || '제목 없음');
-      const domain = extractDomain(article.url);
-      const date = article.publishedAt ? String(article.publishedAt).slice(0, 10) : '';
+  modalBody.innerHTML = `
+    <div class="article-selection-bar">
+      <div class="article-selection-copy">
+        <strong>선택 기사로 새 근거 팩 만들기</strong>
+        <p class="session-meta" data-article-selection-status>전체 ${detail.articles.length}건이 선택되어 있습니다.</p>
+      </div>
+      <div class="snapshot-actions">
+        <button class="button subtle mini-button" type="button" data-article-select-all>전체 선택</button>
+        <button class="button subtle mini-button" type="button" data-article-clear-all>전체 해제</button>
+        <button class="button mini-button" type="button" data-article-derive>선택 기사로 파생 팩 저장</button>
+      </div>
+    </div>
+    ${detail.articles
+      .map((article, index) => {
+        const title = article.url
+          ? `<a href="${escapeHtml(article.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(article.title || article.url)}</a>`
+          : escapeHtml(article.title || '제목 없음');
+        const domain = extractDomain(article.url);
+        const date = article.publishedAt ? String(article.publishedAt).slice(0, 10) : '';
 
-      return `
-        <div class="article-item">
-          <div class="article-title">${title}</div>
-          <div class="article-meta">${escapeHtml(article.source || '')}${domain ? ` · ${escapeHtml(domain)}` : ''}${date ? ` · ${escapeHtml(date)}` : ''}</div>
-          <div class="article-snippet">${escapeHtml(article.summary || '')}</div>
-        </div>
-      `;
-    })
-    .join('');
+        return `
+          <div class="article-item article-select-card">
+            <div class="article-select-row">
+              <input
+                class="article-select-checkbox"
+                type="checkbox"
+                checked
+                data-article-url="${escapeHtml(article.url || `article-${index}`)}"
+              />
+              <div class="article-select-content">
+                <div class="article-title">${title}</div>
+                <div class="article-meta">${escapeHtml(article.source || '')}${domain ? ` · ${escapeHtml(domain)}` : ''}${date ? ` · ${escapeHtml(date)}` : ''}</div>
+                <div class="article-snippet">${escapeHtml(article.summary || '')}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('')}
+  `;
+
+  const selectionInputs = Array.from(modalBody.querySelectorAll('.article-select-checkbox'));
+  const selectionStatus = modalBody.querySelector('[data-article-selection-status]');
+  const selectAllButton = modalBody.querySelector('[data-article-select-all]');
+  const clearAllButton = modalBody.querySelector('[data-article-clear-all]');
+  const deriveButton = modalBody.querySelector('[data-article-derive]');
+
+  const getSelectedArticleUrls = () => selectionInputs
+    .filter((input) => input.checked)
+    .map((input) => input.getAttribute('data-article-url') || '')
+    .filter(Boolean);
+
+  const renderSelectionStatus = (overrideMessage) => {
+    const selectedUrls = getSelectedArticleUrls();
+    if (selectionStatus) {
+      selectionStatus.textContent = overrideMessage || `${selectedUrls.length} / ${selectionInputs.length} 기사 선택됨`;
+    }
+    if (deriveButton) {
+      deriveButton.disabled = selectedUrls.length === 0;
+    }
+    return selectedUrls;
+  };
+
+  selectionInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      renderSelectionStatus();
+    });
+  });
+
+  selectAllButton?.addEventListener('click', () => {
+    selectionInputs.forEach((input) => {
+      input.checked = true;
+    });
+    renderSelectionStatus();
+  });
+
+  clearAllButton?.addEventListener('click', () => {
+    selectionInputs.forEach((input) => {
+      input.checked = false;
+    });
+    renderSelectionStatus();
+  });
+
+  deriveButton?.addEventListener('click', async () => {
+    const articleUrls = renderSelectionStatus();
+    if (articleUrls.length === 0) {
+      renderSelectionStatus('최소 1개 기사를 선택하세요.');
+      return;
+    }
+
+    renderSelectionStatus('선택한 기사로 새 근거 팩을 저장하는 중입니다...');
+    deriveButton.disabled = true;
+
+    const { ok, data } = await fetchJson('/api/snapshots/derive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshotId, articleUrls }),
+    });
+
+    if (!ok) {
+      renderSelectionStatus(data.error || '선택 기사 기반 근거 팩 생성에 실패했습니다.');
+      return;
+    }
+
+    const nextSnapshotId = data.snapshotId || data.id || '';
+    await refreshSnapshots();
+    if (nextSnapshotId) {
+      await useSnapshot(nextSnapshotId);
+      if (newsCollectStatus) {
+        newsCollectStatus.textContent = `근거 팩 ${nextSnapshotId}를 선택 기사 기준으로 생성하고 토론에 연결했습니다.`;
+      }
+      articleModal.style.display = 'none';
+      return;
+    }
+
+    renderSelectionStatus('선택 기사 기반 근거 팩을 저장했지만 ID를 확인하지 못했습니다.');
+  });
+
+  renderSelectionStatus();
 }
 
 async function viewCurrentEvidence() {
@@ -2998,8 +3383,8 @@ function handleEnvelope(envelope) {
   if (event.type === 'synthesis_ready') {
     if (event.payload.status === 'started') {
       synthesisContent = SYNTHESIS_PLACEHOLDER;
-    } else if (event.payload.content) {
-      synthesisContent = event.payload.content;
+    } else if (event.payload.simplifiedContent || event.payload.content) {
+      synthesisContent = event.payload.simplifiedContent || event.payload.content;
       stopTyping();
     }
     renderSynthesis();
@@ -3627,8 +4012,18 @@ function buildSessionMarkdown(session, envelopes) {
         lines.push(roundState.payload.summary || '');
         lines.push('');
         if (Array.isArray(roundState.payload.keyIssues) && roundState.payload.keyIssues.length > 0) {
-          lines.push('Key issues:');
+          lines.push('Contested:');
           roundState.payload.keyIssues.forEach((item) => lines.push(`- ${item}`));
+          lines.push('');
+        }
+        if (Array.isArray(roundState.payload.agreements) && roundState.payload.agreements.length > 0) {
+          lines.push('Settled:');
+          roundState.payload.agreements.forEach((item) => lines.push(`- ${item}`));
+          lines.push('');
+        }
+        if (Array.isArray(roundState.payload.nextFocus) && roundState.payload.nextFocus.length > 0) {
+          lines.push('Needs verification:');
+          roundState.payload.nextFocus.forEach((item) => lines.push(`- ${item}`));
           lines.push('');
         }
       }
@@ -3646,8 +4041,8 @@ function buildSessionMarkdown(session, envelopes) {
   lines.push(`## ${modeMeta.conclusionLabel}`);
   lines.push('');
 
-  if (synthesisEvent?.payload?.content) {
-    lines.push(synthesisEvent.payload.content);
+  if (synthesisEvent?.payload?.simplifiedContent || synthesisEvent?.payload?.content) {
+    lines.push(synthesisEvent.payload.simplifiedContent || synthesisEvent.payload.content);
   } else if (cancelledEvent) {
     lines.push(`Session cancelled (${cancelledEvent.payload.reason}).`);
   } else {
@@ -3684,7 +4079,8 @@ function buildSessionObsidianNote(session, envelopes) {
   const keyIssues = uniqueRoundStateItems(roundStateEvents, 'keyIssues');
   const agreements = uniqueRoundStateItems(roundStateEvents, 'agreements');
   const nextFocus = uniqueRoundStateItems(roundStateEvents, 'nextFocus');
-  const summaryContent = synthesisEvent?.payload?.content
+  const summaryContent = synthesisEvent?.payload?.simplifiedContent
+    || synthesisEvent?.payload?.content
     || (cancelledEvent ? `Session cancelled (${cancelledEvent.payload.reason}).` : '최종 정리 내용이 아직 없습니다.');
 
   const lines = [];
@@ -3816,7 +4212,8 @@ function buildSessionSlidesOutline(session, envelopes) {
   const agreements = uniqueRoundStateItems(roundStateEvents, 'agreements').slice(0, 6);
   const nextFocus = uniqueRoundStateItems(roundStateEvents, 'nextFocus').slice(0, 6);
   const latestState = roundStateEvents.length > 0 ? roundStateEvents[roundStateEvents.length - 1].payload : null;
-  const conclusion = synthesisEvent?.payload?.content
+  const conclusion = synthesisEvent?.payload?.simplifiedContent
+    || synthesisEvent?.payload?.content
     || (cancelledEvent ? `Session cancelled (${cancelledEvent.payload.reason}).` : '최종 결론이 아직 없습니다.');
 
   const lines = [];
@@ -3946,7 +4343,7 @@ if (projectForm) {
     const question = String(formData.get('question') || '').trim();
     const mode = String(formData.get('mode') || 'discussion');
     const modeMeta = getModeMeta(mode);
-    executeStatus.textContent = `프로젝트·기획 ${modeMeta.sessionWord}를 시작하는 중입니다...`;
+    executeStatus.textContent = `프로젝트 설계 ${modeMeta.sessionWord}를 시작하는 중입니다...`;
     const participantResult = resolveWorkflowParticipants('project');
     const ideaStudioValues = collectProjectIdeaStudioValues();
     const hasIdeaStudio = hasProjectIdeaStudioContent(ideaStudioValues);
@@ -4390,14 +4787,22 @@ if (articleModal) {
 }
 
 document.querySelectorAll('.template-chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
+  chip.addEventListener('click', async () => {
     const template = chip.getAttribute('data-template') || '';
     const target = chip.getAttribute('data-template-target');
     const projectIntent = chip.getAttribute('data-project-intent');
+    const selectedTemplateId = chip.getAttribute('data-select-template');
 
     if (target === 'news' && newsQuestionInput) {
+      if (selectedTemplateId && newsTemplateSelect) {
+        newsTemplateSelect.value = selectedTemplateId;
+        renderWorkflowTemplateEditor('news');
+        await syncWorkflowOllamaModelField('news');
+        renderFollowUpComposer();
+      }
       newsQuestionInput.value = template;
       newsQuestionInput.focus();
+      updateWorkspaceStageUI();
       return;
     }
 
@@ -4410,6 +4815,7 @@ document.querySelectorAll('.template-chip').forEach((chip) => {
       projectQuestionInput.value = template;
       projectQuestionInput.focus();
     }
+    updateWorkspaceStageUI();
   });
 });
 
@@ -4491,10 +4897,24 @@ projectNoContextToggle?.addEventListener('change', async () => {
 
 projectExecutionCwdInput?.addEventListener('change', () => {
   renderFollowUpComposer();
+  updateWorkspaceStageUI();
 });
 
 newsExecutionCwdInput?.addEventListener('change', () => {
   renderFollowUpComposer();
+  updateWorkspaceStageUI();
+});
+
+projectQuestionInput?.addEventListener('input', () => {
+  updateWorkspaceStageUI();
+});
+
+newsQuestionInput?.addEventListener('input', () => {
+  updateWorkspaceStageUI();
+});
+
+newsQueryInput?.addEventListener('input', () => {
+  updateWorkspaceStageUI();
 });
 
 getWorkflowControls('project').modeSelect?.addEventListener('change', () => {

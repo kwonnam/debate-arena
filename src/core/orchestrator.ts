@@ -16,11 +16,13 @@ import { normalizeDebateParticipants } from './participants.js';
 import { getPromptBuilders, getSynthesisPromptBuilder } from './prompt-builder.js';
 import { buildFallbackRoundState, RoundStateExtractor } from './round-state.js';
 import { Synthesizer } from './synthesizer.js';
+import { SynthesisSimplifier } from './synthesis-simplifier.js';
 import { isProviderTimeoutError } from '../providers/errors.js';
 import { summarizeSnapshot } from '../news/snapshot.js';
 
 type CancellationReason = 'user_cancelled' | 'timeout' | 'server_shutdown';
 type DiagnosticLogger = (message: string, meta?: Record<string, unknown>) => void;
+const SYNTHESIS_SIMPLIFIER_PROVIDER_ID = 'ollama-cloud-minimax-m2-7';
 
 export class DebateOrchestrator {
   private providers: Map<ProviderName, AIProvider>;
@@ -63,6 +65,49 @@ export class DebateOrchestrator {
     const provider = this.providers.get(name);
     if (!provider) throw new Error(`Provider '${name}' is not configured`);
     return provider;
+  }
+
+  private async simplifySynthesis(
+    question: string,
+    synthesis: string,
+    mode: DebateOptions['mode'],
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<string | null> {
+    const simplifierProvider = this.providers.get(SYNTHESIS_SIMPLIFIER_PROVIDER_ID);
+    if (!simplifierProvider) {
+      this.logDiagnostic('synthesis_simplifier_unavailable', {
+        sessionId,
+        provider: SYNTHESIS_SIMPLIFIER_PROVIDER_ID,
+      });
+      return null;
+    }
+
+    const simplifier = new SynthesisSimplifier(simplifierProvider);
+
+    try {
+      this.ensureNotAborted(sessionId, signal, undefined, SYNTHESIS_SIMPLIFIER_PROVIDER_ID);
+      const rewritten = (await simplifier.generate(question, synthesis, mode ?? 'debate')).trim();
+
+      if (!rewritten) {
+        return null;
+      }
+
+      return normalizeComparableText(rewritten) === normalizeComparableText(synthesis)
+        ? null
+        : rewritten;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        this.emitCancellation(sessionId, this.getCancellationReason(signal), undefined, SYNTHESIS_SIMPLIFIER_PROVIDER_ID);
+        throw error;
+      }
+
+      this.logDiagnostic('synthesis_simplification_failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 
   async run(options: DebateOptions, callbacks: DebateCallbacks): Promise<DebateResult> {
@@ -212,6 +257,7 @@ export class DebateOrchestrator {
 
       // Synthesis
       let synthesis: string | null = null;
+      let simplifiedSynthesis: string | null = null;
       if (options.synthesis) {
         callbacks.onSynthesisStart();
         this.sessionStore?.updateStatus(sessionId, 'SYNTHESIZING');
@@ -284,12 +330,30 @@ export class DebateOrchestrator {
         }
 
         callbacks.onSynthesisEnd(synthesis);
+        simplifiedSynthesis = await this.simplifySynthesis(
+          options.question,
+          synthesis,
+          mode,
+          sessionId,
+          options.signal,
+        );
 
         this.emitEvent({
           type: 'synthesis_ready',
           sessionId,
           timestamp: Date.now(),
-          payload: { status: 'completed', judge: judgeProviderName, content: synthesis },
+          payload: {
+            status: 'completed',
+            judge: judgeProviderName,
+            content: synthesis,
+            simplifiedContent: simplifiedSynthesis ?? undefined,
+          },
+        });
+
+        this.logDiagnostic('synthesis_simplification_completed', {
+          sessionId,
+          simplified: Boolean(simplifiedSynthesis),
+          simplifiedLength: simplifiedSynthesis?.length ?? 0,
         });
       }
 
@@ -308,6 +372,7 @@ export class DebateOrchestrator {
         messages: context.getMessages(),
         roundStates: context.getRoundStates(),
         synthesis,
+        simplifiedSynthesis,
         rounds,
         mode,
       };
@@ -748,6 +813,10 @@ export class DebateOrchestrator {
     });
     this.sessionStore?.updateStatus(sessionId, reason === 'timeout' ? 'FAILED' : 'CANCELLED');
   }
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function estimateMessageChars(messages: Message[]): number {

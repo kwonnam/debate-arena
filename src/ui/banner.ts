@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import boxen from 'boxen';
 
 export function showBanner(): void {
-  const title = chalk.bold.white('FIGHT FOR ME');
-  const subtitle = chalk.gray('AI Debate Arena - Codex vs Claude');
+  const title = chalk.bold.white('DEBATE ARENA');
+  const subtitle = chalk.gray('Multi-model structured debates and collaborative discussions');
 
   const banner = boxen(`${title}\n${subtitle}`, {
     padding: 1,

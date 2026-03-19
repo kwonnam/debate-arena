@@ -211,7 +211,7 @@ export class DebateContext {
         '## Your Task',
         this.prompts.roundTaskPrompt?.()
           ?? [
-            'Using the compressed debate state above, respond to the strongest unresolved disagreements from the other participants.',
+            'Using the compressed decision board above, respond to the strongest unresolved disagreements from the other participants.',
             'Use the latest participant responses and any explicit user guidance as higher-priority context than older rounds.',
             'Directly address counterarguments, build on valid agreements, and avoid repeating settled points.',
           ].join('\n'),

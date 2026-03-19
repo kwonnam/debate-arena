@@ -74,7 +74,7 @@ export async function startRepl(cliArgs?: CliArgs): Promise<void> {
     if (!query && !cliEvidence.snapshotFile) {
       const flag = cliEvidence.kind === 'web' ? '--web' : '--news';
       console.log(chalk.yellow(`  ${flag} 플래그 사용 시 검색어가 필요합니다.`));
-      console.log(chalk.dim(`  예: ffm ${flag} "Trump tariffs"\n`));
+      console.log(chalk.dim(`  예: da ${flag} "Trump tariffs"\n`));
     } else {
       try {
         const scopeLabel = cliEvidence.kind === 'web' ? '웹 근거' : '뉴스';

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>프로젝트·기획 워크벤치</title>
+    <title>프로젝트 설계 워크벤치</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body data-workflow="project">
@@ -11,46 +11,53 @@
 
     <header class="app-header app-header-split">
       <div class="hero-copy">
-        <p class="eyebrow">DEBATE ARENA / PROJECT WORKBENCH</p>
-        <h1>프로젝트·기획 아이디어 워크벤치</h1>
+        <p class="eyebrow">DEBATE ARENA / PROJECT DESIGN</p>
+        <h1>프로젝트 설계 워크벤치</h1>
         <p class="subtitle">
-          로컬 작업공간을 기준으로 기존 프로젝트 개선뿐 아니라 새로운 기획 발상, 아이디어 정제, MVP 설계까지 토론하는 전용 페이지입니다.
+          질문을 정리하고, 컨텍스트를 확인한 뒤, 토론 결과와 최종 권고까지 한 흐름으로 읽을 수 있게 재구성한 작업형 워크벤치입니다.
         </p>
       </div>
       <div class="header-actions header-actions-column">
         <nav class="page-switcher" aria-label="워크벤치 이동">
           <a class="page-link" href="/">허브</a>
-          <a class="page-link is-active" href="/project.html">프로젝트·기획</a>
-          <a class="page-link" href="/news.html">근거 기반 토론</a>
+          <a class="page-link is-active" href="/project.html">프로젝트 설계</a>
+          <a class="page-link" href="/news.html">이슈 분석</a>
           <a class="page-link" href="/settings.html">설정</a>
         </nav>
         <div class="header-toolbar">
           <button class="button subtle" id="refresh" type="button">새로고침</button>
-          <span class="status-pill" id="server-status">Project page</span>
+          <span class="status-pill" id="server-status">프로젝트 설계</span>
         </div>
       </div>
     </header>
 
-    <section class="workflow-banner workflow-banner-compact">
+    <section class="workflow-banner">
       <div class="workflow-step is-active">
         <span class="workflow-index">1</span>
         <div>
-          <strong>문제 또는 아이디어 입력</strong>
-          <p>질문만 던져도 되고, 기획 캔버스로 대상 사용자·문제·제약을 구조화할 수도 있습니다.</p>
+          <strong>질문 설계</strong>
+          <p>질문, 템플릿, 기획 캔버스로 주제를 정리하고 바로 실행할 수 있습니다.</p>
         </div>
       </div>
       <div class="workflow-step">
         <span class="workflow-index">2</span>
         <div>
-          <strong>다중 모델 검토</strong>
-          <p>서로 다른 모델이 아이디어 확장, 우선순위, MVP 범위를 라운드별로 검토합니다.</p>
+          <strong>컨텍스트 확인</strong>
+          <p>실행 경로, 참가자 구성, 아이디어 캔버스가 토론 배경으로 어떻게 연결되는지 확인합니다.</p>
         </div>
       </div>
       <div class="workflow-step">
         <span class="workflow-index">3</span>
         <div>
-          <strong>실행 가능한 정리</strong>
-          <p>추천 방향, 버려야 할 아이디어, 검증 질문, 다음 액션을 synthesis와 함께 정리합니다.</p>
+          <strong>Decision Board</strong>
+          <p>결정 보드와 참여자 비교를 먼저 보고, 세부 진행은 필요할 때 아래에서 펼쳐 봅니다.</p>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <span class="workflow-index">4</span>
+        <div>
+          <strong>최종 권고</strong>
+          <p>결론, 후속 액션, 내보내기까지 완료 상태에 맞는 정보만 집중해서 읽습니다.</p>
         </div>
       </div>
     </section>
@@ -62,31 +69,80 @@
         <div class="round-bar"><div class="round-fill" id="round-fill"></div></div>
       </div>
       <div class="gap-banner" id="gap-banner" style="display:none">⚠️ 이벤트 간극 감지, 1번부터 다시 재생합니다.</div>
-      <div class="runtime-actions">
-        <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
-        <button class="button subtle runtime-btn" type="button" id="resume-session">멈춘 지점부터 재시작</button>
-        <button class="button subtle runtime-btn" type="button" id="continue-session">결론에서 새 주제</button>
-        <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
-        <label class="runtime-label">
-          Replay from
-          <input type="number" id="replay-seq" min="1" placeholder="1" />
-        </label>
-        <button class="button subtle runtime-btn" id="replay" type="button">재생</button>
-        <button class="button subtle runtime-btn" id="export-md" type="button">마크다운 내보내기</button>
-        <button class="button subtle runtime-btn" id="export-obsidian" type="button">Obsidian 노트</button>
-        <button class="button subtle runtime-btn" id="export-slides" type="button">슬라이드 개요</button>
+      <div class="runtime-actions" id="runtime-actions">
+        <div class="runtime-action-group" id="runtime-session-tools">
+          <button class="button subtle runtime-btn" type="button" id="stop-session">현재 세션 중단</button>
+          <button class="button subtle runtime-btn" type="button" id="resume-session">멈춘 지점부터 재시작</button>
+          <button class="button subtle runtime-btn" type="button" id="continue-session">결론에서 새 주제</button>
+          <button class="button subtle runtime-btn" type="button" id="stop-team">모든 세션 중단</button>
+        </div>
+        <div class="runtime-action-group" id="runtime-replay-tools">
+          <label class="runtime-label">
+            Replay from
+            <input type="number" id="replay-seq" min="1" placeholder="1" />
+          </label>
+          <button class="button subtle runtime-btn" id="replay" type="button">재생</button>
+        </div>
+        <div class="runtime-action-group" id="runtime-export-tools">
+          <button class="button subtle runtime-btn" id="export-md" type="button">마크다운 내보내기</button>
+          <button class="button subtle runtime-btn" id="export-obsidian" type="button">Obsidian 노트</button>
+          <button class="button subtle runtime-btn" id="export-slides" type="button">슬라이드 개요</button>
+        </div>
       </div>
       <p class="form-status" id="execute-status"></p>
     </div>
+
+    <section class="workspace-stage-shell">
+      <div class="workspace-stage-card">
+        <div class="workspace-stage-copy">
+          <div class="workspace-stage-topline">
+            <span class="workspace-stage-pill" id="workspace-stage-pill">시작 전</span>
+            <span class="meta-badge" id="workspace-stage-focus">질문을 먼저 정리하세요</span>
+          </div>
+          <h2 id="workspace-stage-title">질문과 템플릿을 정리한 뒤 세션을 시작하세요</h2>
+          <p id="workspace-stage-description">
+            첫 화면에서는 질문, 템플릿, 실행만 빠르게 판단하고, 고급 설정과 세션 도구는 필요할 때만 보이도록 구성했습니다.
+          </p>
+          <div class="workspace-stage-actions">
+            <a class="button" id="workspace-primary-action" href="#project-form">질문 준비하기</a>
+            <a class="button subtle" id="workspace-secondary-action" href="#session-list">최근 세션 보기</a>
+          </div>
+        </div>
+        <div class="workspace-stage-summary-card">
+          <span class="mini-badge">현재 안내</span>
+          <p id="workspace-stage-summary">
+            질문이나 템플릿을 선택하면 이 공간이 실행 상태와 현재 요약 중심으로 바뀝니다.
+          </p>
+        </div>
+      </div>
+
+      <div class="workspace-stage-rail" id="workspace-stage-rail">
+        <div class="workspace-stage-step is-active" data-stage-step="ready">
+          <span>1</span>
+          <strong>질문</strong>
+          <p>질문, 템플릿, 캔버스</p>
+        </div>
+        <div class="workspace-stage-step" data-stage-step="running">
+          <span>2</span>
+          <strong>결정 보드</strong>
+          <p>확정·경합·검증 필요 상태</p>
+        </div>
+        <div class="workspace-stage-step" data-stage-step="done">
+          <span>3</span>
+          <strong>최종 권고</strong>
+          <p>결론, 후속 액션, 내보내기</p>
+        </div>
+      </div>
+    </section>
 
     <div class="workbench-layout">
       <aside class="sidebar-column">
         <section class="workbench-card">
           <div class="section-heading">
-            <span class="step-badge">Local</span>
+            <span class="step-badge">질문</span>
             <div>
-              <h2>프로젝트·기획 아이디어</h2>
-              <p>로컬 프로젝트 개선부터 신규 기획 발상, MVP 설계, 아이디어 정제까지 한 흐름에서 토론합니다.</p>
+              <h2>질문 설계</h2>
+              <p>질문, 템플릿, 기획 캔버스를 먼저 정리하고 필요할 때만 고급 설정을 엽니다.</p>
             </div>
           </div>
 
@@ -237,13 +293,14 @@
             </section>
 
             <div class="field">
-              <label>진행 방식</label>
+              <label>목표 / 프로토콜</label>
               <select name="mode">
-                <option value="discussion" selected>Discussion · 함께 정리</option>
-                <option value="plan">Plan · 설계/구현 초안</option>
-                <option value="debate">Debate · 논점 대결</option>
+                <option value="discussion" selected>탐색 · 관점과 대안 확장</option>
+                <option value="debate">검증 · 주장과 가정 대결</option>
+                <option value="red-blue">설계 · Red/Blue로 방향 도출</option>
+                <option value="plan">실행 계획 · 설계/구현 초안</option>
               </select>
-              <small class="field-hint">Discussion은 합의점 중심, Plan은 이전 결론을 실제 설계/구현 계획으로 구체화합니다.</small>
+              <small class="field-hint">먼저 목표(탐색/검증/설계)를 고르고, 실제 구현 단계까지 내려갈 때만 실행 계획 모드를 사용합니다.</small>
             </div>
 
             <div class="field">
@@ -351,17 +408,17 @@
             </div>
 
             <div class="execute-actions">
-              <button class="button" type="submit">프로젝트·기획 세션 시작</button>
+              <button class="button" type="submit">프로젝트 설계 세션 시작</button>
             </div>
           </form>
         </section>
 
         <section class="workbench-card">
           <div class="section-heading">
-            <span class="step-badge muted">현재</span>
+            <span class="step-badge muted">상태</span>
             <div>
-              <h2>세션 컨텍스트</h2>
-              <p>현재 선택한 프로젝트·기획 세션의 실행 범위와 상태를 확인합니다.</p>
+              <h2>실행 상태</h2>
+              <p>현재 선택한 세션의 실행 범위와 배경 정보를 먼저 읽고 필요한 제어를 이어서 사용합니다.</p>
             </div>
           </div>
           <div class="session-context" id="session-brief">
@@ -374,10 +431,10 @@
 
         <section class="workbench-card" id="follow-up-section">
           <div class="section-heading">
-            <span class="step-badge muted">Next</span>
+            <span class="step-badge muted">Action</span>
             <div>
-              <h2>후속 토의</h2>
-              <p>선택한 완료 세션의 결론을 바탕으로 새 주제를 추가하고 다음 토의를 시작합니다.</p>
+              <h2>다음 액션</h2>
+              <p>완료된 세션의 결론을 바탕으로 새 주제를 이어가거나 다음 검증 질문으로 전환합니다.</p>
             </div>
           </div>
           <div class="follow-up-panel" id="follow-up-panel">
@@ -418,8 +475,8 @@
           <div class="section-heading">
             <span class="step-badge muted">기록</span>
             <div>
-              <h2>최근 프로젝트·기획 세션</h2>
-              <p>프로젝트 개선과 신규 기획 흐름에서 생성된 세션만 별도로 표시합니다.</p>
+              <h2>세션 기록</h2>
+              <p>이 워크벤치에서 생성된 세션을 다시 열어 결론과 핵심 쟁점 보드를 이어서 확인합니다.</p>
             </div>
           </div>
           <div class="session-list" id="session-list"></div>
@@ -429,23 +486,28 @@
       <main class="main-column">
         <section class="workbench-card">
           <div class="section-heading">
-            <span class="step-badge">Round</span>
+            <span class="step-badge">핵심</span>
             <div>
-              <h2>라운드 보드</h2>
-              <p>현재 라운드의 핵심 쟁점, 합의점, 다음 포커스를 요약하고 이전 라운드도 다시 열 수 있습니다.</p>
+              <h2>Decision Board</h2>
+              <p>실행 중에는 현재 라운드의 결정 상태를 먼저 보고, 완료 후에는 결론으로 이어지는 핵심 포인트만 다시 읽습니다.</p>
             </div>
           </div>
-          <div class="round-history" id="round-history" role="tablist" aria-label="라운드 보드 선택"></div>
-          <div class="decision-board empty" id="decision-board">라운드가 끝나면 핵심 보드가 이곳에 표시됩니다.</div>
+          <div class="round-history" id="round-history" role="tablist" aria-label="Decision Board 라운드 선택"></div>
+          <div class="decision-board empty" id="decision-board">라운드가 끝나면 Decision Board가 이곳에 표시됩니다.</div>
           <div class="participant-lanes" id="participant-lanes"></div>
+        </section>
+
+        <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
+          <span class="synthesis-hero-label">최종 권고</span>
+          <div id="synthesis"></div>
         </section>
 
         <section class="debate-grid">
           <article class="workbench-card">
             <div class="pane-header">
               <div>
-                <h3>실시간 토론 스트림</h3>
-                <p>토큰 단위로 올라오는 발화를 한 화면에서 관찰합니다.</p>
+                <h3>참여자 비교 / 토론</h3>
+                <p>실행 중에는 참여자 발화를 비교하고, 완료 후에는 원문 맥락을 다시 확인합니다.</p>
               </div>
             </div>
             <div class="bubble-stream" id="stream"></div>
@@ -457,17 +519,12 @@
           <article class="workbench-card">
             <div class="pane-header">
               <div>
-                <h3>타임라인</h3>
-                <p>라운드 시작, 완료, synthesis 이벤트를 시간순으로 확인합니다.</p>
+                <h3>세부 진행</h3>
+                <p>라운드 시작, 완료, synthesis 같은 상세 이벤트를 필요할 때만 아래에서 확인합니다.</p>
               </div>
             </div>
             <div class="timeline" id="timeline"></div>
           </article>
-        </section>
-
-        <section class="workbench-card synthesis-shell" id="synthesis-section" style="display:none">
-          <span class="synthesis-hero-label">Synthesis</span>
-          <div id="synthesis"></div>
         </section>
       </main>
     </div>

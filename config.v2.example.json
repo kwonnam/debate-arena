@@ -101,6 +101,16 @@
         "maxContextTokens": 262144
       }
     },
+    "ollama-cloud-minimax-m2-7": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "minimax-m2.7:cloud",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
     "ollama-cloud-kimi-k2-5": {
       "type": "ollama-compat",
       "baseUrl": "https://ollama.com",
@@ -125,6 +135,16 @@
       "type": "ollama-compat",
       "baseUrl": "https://ollama.com",
       "model": "qwen3.5:397b-cloud",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "capabilities": {
+        "supportsStreaming": true,
+        "maxContextTokens": 262144
+      }
+    },
+    "ollama-cloud-nemotron-3-super": {
+      "type": "ollama-compat",
+      "baseUrl": "https://ollama.com",
+      "model": "nemotron-3-super:cloud",
       "apiKeyEnvVar": "OLLAMA_API_KEY",
       "capabilities": {
         "supportsStreaming": true,

@@ -90,7 +90,7 @@ describe('DebateContext', () => {
     const messages = context.buildMessagesFor(claudeParticipant, 2, 'rebuttal');
     const userMessages = messages.filter((message) => message.role === 'user').map((message) => message.content);
 
-    expect(userMessages.join('\n')).toContain('## Debate State So Far');
+    expect(userMessages.join('\n')).toContain('## Decision Board So Far');
     expect(userMessages.join('\n')).toContain('운영 비용 비교');
     expect(userMessages.join('\n')).toContain('UX 전문가 has responded with the following argument');
     expect(userMessages.join('\n')).toContain('## Latest User Guidance');

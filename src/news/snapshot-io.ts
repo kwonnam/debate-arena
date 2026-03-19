@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { EvidenceSnapshot } from './snapshot.js';
 
-const DEFAULT_SNAPSHOT_DIR = './ffm-snapshots';
+const DEFAULT_SNAPSHOT_DIR = './debate-arena-snapshots';
 
 export async function writeSnapshot(
   snapshot: EvidenceSnapshot,

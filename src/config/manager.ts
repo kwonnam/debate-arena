@@ -74,7 +74,7 @@ function tryReadConfigV2(path: string): ConfigV2 | null {
 function resolveConfigV2Candidates(): string[] {
   const candidates: string[] = [];
 
-  const override = process.env.FFM_CONFIG_V2?.trim();
+  const override = process.env.DEBATE_ARENA_CONFIG_V2?.trim() || process.env.FFM_CONFIG_V2?.trim();
   if (override) {
     const overridePath = override.startsWith('/')
       ? override
